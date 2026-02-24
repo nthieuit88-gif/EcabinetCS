@@ -115,13 +115,13 @@ const DocumentManager: React.FC = () => {
                     type: formData.type,
                     status: formData.status,
                     category: formData.category,
-                    file_url: fileUrl
+                    file_url: fileUrl || null
                 })
                 .eq('id', formData.id);
                 
             if (error) {
                 console.error('Error updating document:', error);
-                alert('Lỗi khi cập nhật tài liệu!');
+                alert(`Lỗi khi cập nhật tài liệu: ${error.message}`);
             }
         } else {
             // Insert into Supabase
@@ -134,13 +134,13 @@ const DocumentManager: React.FC = () => {
                     type: formData.type,
                     status: formData.status,
                     category: formData.category,
-                    file_url: fileUrl,
+                    file_url: fileUrl || null,
                     unit_id: unitId
                 });
                 
             if (error) {
                 console.error('Error adding document:', error);
-                alert('Lỗi khi thêm tài liệu!');
+                alert(`Lỗi khi thêm tài liệu: ${error.message}`);
             }
         }
 

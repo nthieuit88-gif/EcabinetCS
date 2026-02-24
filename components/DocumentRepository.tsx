@@ -141,6 +141,8 @@ const DocumentRepository: React.FC = () => {
       const unitId = getCurrentUnitId();
       let successCount = 0;
 
+      let lastError = '';
+
       for (let i = 0; i < selectedFiles.length; i++) {
           const file = selectedFiles[i];
           const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
@@ -167,13 +169,19 @@ const DocumentRepository: React.FC = () => {
                       type: fileExt,
                       status: 'pending',
                       category: 'other',
-                      file_url: publicUrlData.publicUrl,
+                      file_url: publicUrlData.publicUrl || null,
                       unit_id: unitId
                   });
 
               if (!dbError) {
                   successCount++;
+              } else {
+                  console.error('DB Insert Error:', dbError);
+                  lastError = dbError.message;
               }
+          } else {
+              console.error('Upload Error:', uploadError);
+              lastError = uploadError.message;
           }
           
           setUploadProgress(Math.round(((i + 1) / selectedFiles.length) * 100));
@@ -183,7 +191,7 @@ const DocumentRepository: React.FC = () => {
           await syncDocumentsFromSupabase(unitId);
           loadDocs();
       } else {
-          alert('Có lỗi xảy ra khi tải lên tài liệu.');
+          alert(`Có lỗi xảy ra khi tải lên tài liệu: ${lastError}`);
       }
 
       setIsUploading(false);
