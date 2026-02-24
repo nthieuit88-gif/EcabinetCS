@@ -90,9 +90,24 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                     const response = await fetch(doc.url!);
                     const arrayBuffer = await response.arrayBuffer();
                     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-                    const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
-                    const html = XLSX.utils.sheet_to_html(worksheet);
+                    
+                    let html = '<div class="excel-viewer space-y-8">';
+                    workbook.SheetNames.forEach(sheetName => {
+                        const worksheet = workbook.Sheets[sheetName];
+                        const sheetHtml = XLSX.utils.sheet_to_html(worksheet);
+                        html += `
+                            <div class="sheet-section">
+                                <h3 class="text-lg font-bold text-slate-800 mb-3 pb-2 border-b border-slate-200 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="9" x2="9" y1="9" y2="21"/></svg>
+                                    ${sheetName}
+                                </h3>
+                                <div class="overflow-x-auto custom-scrollbar pb-4">
+                                    ${sheetHtml}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
                     setContent(html);
                 } else if (doc.type === 'txt') {
                     const response = await fetch(doc.url!);
@@ -159,9 +174,25 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                         className="w-full h-full border-none" 
                         title="PDF Viewer"
                     />
+                ) : doc.type === 'docx' && hasUrl ? (
+                    <div className="w-full h-full overflow-auto relative custom-scrollbar">
+                        {loading && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#525659] z-10 text-white">
+                                <Loader2 className="animate-spin mb-2" size={32} />
+                                <span>Đang tải nội dung...</span>
+                            </div>
+                        )}
+                        {error && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#525659] z-10 text-red-400">
+                                <ShieldAlert className="mb-2" size={32} />
+                                <span>{error}</span>
+                            </div>
+                        )}
+                        <div ref={docxContainerRef} className="w-full min-h-full" />
+                    </div>
                 ) : (
                     <div className="w-full h-full overflow-y-auto p-8 flex justify-center custom-scrollbar">
-                        <div className={`w-[800px] min-h-[1132px] bg-white shadow-2xl ${doc.type === 'docx' ? 'p-0' : 'p-[60px]'} text-slate-900 relative`}>
+                        <div className="w-[800px] min-h-[1132px] bg-white shadow-2xl p-[60px] text-slate-900 relative">
                             {loading && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 text-slate-500">
                                     <Loader2 className="animate-spin mb-2" size={32} />
@@ -176,16 +207,11 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                                 </div>
                             )}
 
-                            <div 
-                                ref={docxContainerRef} 
-                                className={`w-full h-full ${doc.type === 'docx' ? 'block' : 'hidden'}`} 
-                            />
-
-                            {doc.type !== 'docx' && content && (
+                            {content && (
                                 <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: content }} />
                             )}
 
-                            {doc.type !== 'docx' && !content && !loading && !error && (
+                            {!content && !loading && !error && (
                                 <>
                                     {/* Mock Content based on file type */}
                                     <div className="text-center mb-10">
@@ -232,7 +258,20 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                                         </div>
                                     </div>
                                     
-                                    {!isPdf && (
+                                    {['doc', 'pptx'].includes(doc.type) ? (
+                                        <div className="mt-10 p-8 bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center gap-4">
+                                            <div className="h-20 w-20 bg-slate-200 rounded-full flex items-center justify-center text-slate-500">
+                                                <FileText size={40} />
+                                            </div>
+                                            <div>
+                                                <p className="text-slate-800 font-bold text-xl mb-2">Không thể xem trước định dạng này</p>
+                                                <p className="text-slate-500 text-sm max-w-md mx-auto">Định dạng .{doc.type} không được hỗ trợ xem trước trực tiếp trên trình duyệt. Vui lòng tải xuống để xem hoặc chuyển đổi sang định dạng .docx / .pdf.</p>
+                                            </div>
+                                            <a href={doc.url} download={doc.name} className="mt-4 px-6 py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition-colors flex items-center gap-2 shadow-lg shadow-teal-500/30">
+                                                <Download size={20} /> Tải xuống tài liệu
+                                            </a>
+                                        </div>
+                                    ) : (
                                         <div className="mt-10 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700 text-center">
                                             Đây là bản xem trước mô phỏng. Vui lòng tải xuống để xem định dạng gốc.
                                         </div>

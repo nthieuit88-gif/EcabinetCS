@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ScrollReveal from './ui/ScrollReveal';
-import { FileText, Folder, Search, Filter, Download, Eye, Cloud, MoreHorizontal, FileSpreadsheet, FileIcon, Upload, X, Trash2, CheckCircle, FileUp, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getCurrentUnitData, saveCurrentUnitDocuments, Document } from '../utils/dataManager';
+import { FileText, Folder, Search, Filter, Download, Eye, Cloud, MoreHorizontal, FileSpreadsheet, FileIcon, Upload, X, Trash2, CheckCircle, FileUp, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { getCurrentUnitData, getCurrentUnitId, syncDocumentsFromSupabase, Document } from '../utils/dataManager';
+import { supabase } from '../utils/supabaseClient';
 
 const DocumentRow: React.FC<{ doc: any }> = ({ doc }) => {
     const statusColors: any = {
@@ -40,8 +41,12 @@ const DocumentRow: React.FC<{ doc: any }> = ({ doc }) => {
                 {statusText[doc.status]}
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button title="Xem" className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Eye size={14} /></button>
-                <button title="Tải về" className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Download size={14} /></button>
+                {doc.url && (
+                    <>
+                        <a href={doc.url} target="_blank" rel="noopener noreferrer" title="Xem" className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center"><Eye size={14} /></a>
+                        <a href={doc.url} download={doc.name} title="Tải về" className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors flex items-center justify-center"><Download size={14} /></a>
+                    </>
+                )}
                 <button title="Khác" className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"><MoreHorizontal size={14} /></button>
             </div>
         </div>
@@ -127,44 +132,64 @@ const DocumentRepository: React.FC = () => {
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleUploadSubmit = () => {
+  const handleUploadSubmit = async () => {
       if (selectedFiles.length === 0) return;
       
       setIsUploading(true);
       setUploadProgress(0);
 
-      // Simulate Upload
-      const interval = setInterval(() => {
-          setUploadProgress(prev => {
-              if (prev >= 100) {
-                  clearInterval(interval);
-                  return 100;
+      const unitId = getCurrentUnitId();
+      let successCount = 0;
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i];
+          const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const filePath = `${unitId}/${fileName}`;
+
+          // Upload to Storage
+          const { error: uploadError } = await supabase.storage
+              .from('documents')
+              .upload(filePath, file);
+
+          if (!uploadError) {
+              const { data: publicUrlData } = supabase.storage
+                  .from('documents')
+                  .getPublicUrl(filePath);
+
+              // Insert to DB
+              const { error: dbError } = await supabase
+                  .from('documents')
+                  .insert({
+                      name: file.name,
+                      date: new Date().toLocaleDateString('vi-VN'),
+                      size: formatSize(file.size),
+                      type: fileExt,
+                      status: 'pending',
+                      category: 'other',
+                      file_url: publicUrlData.publicUrl,
+                      unit_id: unitId
+                  });
+
+              if (!dbError) {
+                  successCount++;
               }
-              return prev + 10;
-          });
-      }, 200);
-
-      setTimeout(() => {
-          // Add new docs to state
-          const newDocs: Document[] = selectedFiles.map((file, index) => ({
-              id: Date.now() + index,
-              name: file.name,
-              date: "Vừa xong",
-              size: formatSize(file.size),
-              type: file.name.split('.').pop()?.toLowerCase() || 'file',
-              status: "pending",
-              category: "other"
-          }));
-
-          const updatedDocs = [...newDocs, ...docs];
-          saveCurrentUnitDocuments(updatedDocs);
+          }
           
-          setIsUploading(false);
-          setUploadProgress(0);
-          setSelectedFiles([]);
-          setShowUploadModal(false);
-          clearInterval(interval);
-      }, 2500);
+          setUploadProgress(Math.round(((i + 1) / selectedFiles.length) * 100));
+      }
+
+      if (successCount > 0) {
+          await syncDocumentsFromSupabase(unitId);
+          loadDocs();
+      } else {
+          alert('Có lỗi xảy ra khi tải lên tài liệu.');
+      }
+
+      setIsUploading(false);
+      setUploadProgress(0);
+      setSelectedFiles([]);
+      setShowUploadModal(false);
   };
 
   return (

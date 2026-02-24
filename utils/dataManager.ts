@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient';
+
 export interface User {
     id: number;
     name: string;
@@ -329,19 +331,45 @@ export const saveCurrentUnitBookings = (bookings: Booking[]) => {
     window.dispatchEvent(new Event('data-change'));
 };
 
-// Save Documents for Current Unit
-export const saveCurrentUnitDocuments = (documents: Document[]) => {
-    const unitId = getCurrentUnitId();
-    const key = `ECABINET_DATA_${unitId}`;
-    const currentData = getCurrentUnitData();
-    
-    const newData: UnitData = {
-        ...currentData,
-        documents: documents
-    };
-    
-    localStorage.setItem(key, JSON.stringify(newData));
-    window.dispatchEvent(new Event('data-change'));
+export const syncDocumentsFromSupabase = async (unitId: string): Promise<Document[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('unit_id', unitId)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching documents from Supabase:', error);
+            return [];
+        }
+
+        if (data) {
+            const mappedDocs: Document[] = data.map(d => ({
+                id: d.id,
+                name: d.name,
+                date: d.date,
+                size: d.size,
+                type: d.type,
+                status: d.status as any,
+                category: d.category,
+                url: d.file_url
+            }));
+
+            const key = `ECABINET_DATA_${unitId}`;
+            const currentDataStr = localStorage.getItem(key);
+            if (currentDataStr) {
+                const currentData = JSON.parse(currentDataStr);
+                currentData.documents = mappedDocs;
+                localStorage.setItem(key, JSON.stringify(currentData));
+                window.dispatchEvent(new Event('data-change'));
+            }
+            return mappedDocs;
+        }
+    } catch (err) {
+        console.error('Failed to sync documents:', err);
+    }
+    return [];
 };
 
 export const getAllUnits = () => {

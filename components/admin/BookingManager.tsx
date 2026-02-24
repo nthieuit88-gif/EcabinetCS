@@ -1,12 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room } from '../../utils/dataManager';
-import { Trash2, Calendar, Clock, MapPin, Search, Filter } from 'lucide-react';
+import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User } from '../../utils/dataManager';
+import { Trash2, Calendar, Clock, MapPin, Search, Filter, Plus, Pencil, X, Check } from 'lucide-react';
 
 const BookingManager: React.FC = () => {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [rooms, setRooms] = useState<Room[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
+
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+    const [formData, setFormData] = useState<Partial<Booking>>({
+        title: '',
+        day: new Date().getDate(),
+        startTime: '08:00',
+        endTime: '09:00',
+        roomId: '',
+        type: 'internal',
+        attendees: [],
+        documents: []
+    });
 
     useEffect(() => {
         loadData();
@@ -16,6 +30,54 @@ const BookingManager: React.FC = () => {
         const data = getCurrentUnitData();
         setBookings(data.bookings || []);
         setRooms(data.rooms || []);
+        setUsers(data.users || []);
+    };
+
+    const handleOpenModal = (booking?: Booking) => {
+        if (booking) {
+            setEditingBooking(booking);
+            setFormData(booking);
+        } else {
+            setEditingBooking(null);
+            setFormData({
+                title: '',
+                day: new Date().getDate(),
+                startTime: '08:00',
+                endTime: '09:00',
+                roomId: rooms.length > 0 ? rooms[0].id : '',
+                type: 'internal',
+                attendees: [],
+                documents: []
+            });
+        }
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setEditingBooking(null);
+    };
+
+    const handleSave = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!formData.title || !formData.roomId) return;
+
+        let newBookings = [...bookings];
+        if (editingBooking) {
+            newBookings = newBookings.map(b => b.id === editingBooking.id ? { ...formData, id: editingBooking.id } as Booking : b);
+        } else {
+            const newBooking: Booking = {
+                ...formData as Booking,
+                id: Date.now(),
+                attendees: formData.attendees || [],
+                documents: formData.documents || []
+            };
+            newBookings.push(newBooking);
+        }
+
+        saveCurrentUnitBookings(newBookings);
+        setBookings(newBookings);
+        handleCloseModal();
     };
 
     const handleDelete = (id: number) => {
@@ -42,6 +104,12 @@ const BookingManager: React.FC = () => {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <h2 className="text-2xl font-bold text-slate-800">Quản lý đặt lịch</h2>
                 <div className="flex gap-3 w-full md:w-auto">
+                    <button 
+                        onClick={() => handleOpenModal()}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 whitespace-nowrap"
+                    >
+                        <Plus size={18} /> Thêm lịch họp
+                    </button>
                     <div className="relative flex-1 md:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input 
@@ -114,13 +182,22 @@ const BookingManager: React.FC = () => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <button 
-                                            onClick={() => handleDelete(booking.id)}
-                                            className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-                                            title="Xóa"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={() => handleOpenModal(booking)}
+                                                className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                                title="Sửa"
+                                            >
+                                                <Pencil size={16} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(booking.id)}
+                                                className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                title="Xóa"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -135,6 +212,141 @@ const BookingManager: React.FC = () => {
                     </table>
                 </div>
             </div>
+
+            {/* Modal Form */}
+            {isModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+                    <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95">
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                {editingBooking ? <Pencil size={18} className="text-blue-600" /> : <Plus size={18} className="text-blue-600" />}
+                                {editingBooking ? "Chỉnh sửa lịch họp" : "Thêm lịch họp mới"}
+                            </h3>
+                            <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-200 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSave} className="p-6 space-y-5">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold uppercase text-slate-500">Tên cuộc họp <span className="text-red-500">*</span></label>
+                                <input 
+                                    required
+                                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                    value={formData.title || ''}
+                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold uppercase text-slate-500">Ngày</label>
+                                    <input 
+                                        type="number"
+                                        min="1"
+                                        max="31"
+                                        required
+                                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                        value={formData.day || ''}
+                                        onChange={(e) => setFormData({ ...formData, day: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold uppercase text-slate-500">Bắt đầu</label>
+                                    <input 
+                                        type="time"
+                                        required
+                                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                        value={formData.startTime || ''}
+                                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold uppercase text-slate-500">Kết thúc</label>
+                                    <input 
+                                        type="time"
+                                        required
+                                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                        value={formData.endTime || ''}
+                                        onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold uppercase text-slate-500">Phòng họp <span className="text-red-500">*</span></label>
+                                    <select 
+                                        required
+                                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-white"
+                                        value={formData.roomId || ''}
+                                        onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                                    >
+                                        <option value="" disabled>Chọn phòng</option>
+                                        {rooms.map(room => (
+                                            <option key={room.id} value={room.id}>{room.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold uppercase text-slate-500">Loại cuộc họp</label>
+                                    <select 
+                                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-white"
+                                        value={formData.type || 'internal'}
+                                        onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                                    >
+                                        <option value="internal">Nội bộ</option>
+                                        <option value="important">Quan trọng</option>
+                                        <option value="external">Đối ngoại</option>
+                                        <option value="training">Đào tạo</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold uppercase text-slate-500">Người tham dự</label>
+                                <div className="border border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto custom-scrollbar">
+                                    {users.map(user => (
+                                        <label key={user.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded text-blue-600 focus:ring-blue-500"
+                                                checked={formData.attendees?.some(a => a.id === user.id) || false}
+                                                onChange={(e) => {
+                                                    const currentAttendees = formData.attendees || [];
+                                                    if (e.target.checked) {
+                                                        setFormData({ ...formData, attendees: [...currentAttendees, user] });
+                                                    } else {
+                                                        setFormData({ ...formData, attendees: currentAttendees.filter(a => a.id !== user.id) });
+                                                    }
+                                                }}
+                                            />
+                                            <span className="text-sm font-medium text-slate-700">{user.name}</span>
+                                            <span className="text-xs text-slate-400 ml-auto">{user.role}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 pt-4 border-t border-slate-100">
+                                <button 
+                                    type="button" 
+                                    onClick={handleCloseModal}
+                                    className="flex-1 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition-colors"
+                                >
+                                    Hủy
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    className="flex-1 py-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl text-sm font-bold transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                                >
+                                    <Check size={16} /> {editingBooking ? "Cập nhật" : "Lưu lịch họp"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

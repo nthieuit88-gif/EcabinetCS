@@ -8,7 +8,7 @@ import RoomManager from './components/admin/RoomManager';
 import BookingManager from './components/admin/BookingManager';
 import UserManager from './components/admin/UserManager';
 import DocumentManager from './components/admin/DocumentManager';
-import { initData, getCurrentUnitId, getUserById } from './utils/dataManager';
+import { initData, getCurrentUnitId, getUserById, syncDocumentsFromSupabase } from './utils/dataManager';
 import { testSupabaseConnection } from './utils/supabaseClient';
 
 // Protected Route Component
@@ -84,6 +84,9 @@ function App() {
     // Initial data seed
     initData();
     
+    // Sync documents from Supabase
+    syncDocumentsFromSupabase(getCurrentUnitId());
+    
     // Ensure state matches current unit (in case initData changed it, though unlikely)
     const initialUnit = getCurrentUnitId();
     if (initialUnit !== currentUnitId) {
@@ -94,6 +97,7 @@ function App() {
     const handleUnitChange = () => {
         const newUnitId = getCurrentUnitId();
         setCurrentUnitId(prev => (prev !== newUnitId ? newUnitId : prev));
+        syncDocumentsFromSupabase(newUnitId);
     };
 
     window.addEventListener('unit-change', handleUnitChange);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Plus, Search, Trash2, Pencil, X, Check, Upload, FileSpreadsheet, File, FolderOpen, Filter } from 'lucide-react';
-import { Document, getCurrentUnitData, saveCurrentUnitDocuments } from '../../utils/dataManager';
+import { FileText, Plus, Search, Trash2, Pencil, X, Check, Upload, FileSpreadsheet, File, FolderOpen, Filter, Loader2 } from 'lucide-react';
+import { Document, getCurrentUnitData, getCurrentUnitId, syncDocumentsFromSupabase } from '../../utils/dataManager';
+import { supabase } from '../../utils/supabaseClient';
 
 const DocumentManager: React.FC = () => {
     const [documents, setDocuments] = useState<Document[]>([]);
@@ -8,11 +9,20 @@ const DocumentManager: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<Partial<Document>>({});
+    const [selectedFile, setSelectedFile] = useState<globalThis.File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        const data = getCurrentUnitData();
-        setDocuments(data.documents || []);
+        const loadDocs = async () => {
+            setIsLoading(true);
+            const unitId = getCurrentUnitId();
+            const docs = await syncDocumentsFromSupabase(unitId);
+            setDocuments(docs);
+            setIsLoading(false);
+        };
+        loadDocs();
     }, []);
 
     const filteredDocs = documents.filter(doc => 
@@ -29,49 +39,125 @@ const DocumentManager: React.FC = () => {
             status: 'draft',
             category: 'other'
         });
+        setSelectedFile(null);
         setIsEditing(false);
         setShowForm(true);
     };
 
     const handleEdit = (doc: Document) => {
         setFormData(doc);
+        setSelectedFile(null);
         setIsEditing(true);
         setShowForm(true);
     };
 
-    const handleDelete = (id: number) => {
+    const handleDelete = async (id: number) => {
         if (window.confirm('Bạn có chắc chắn muốn xóa tài liệu này?')) {
-            const newDocs = documents.filter(d => d.id !== id);
-            setDocuments(newDocs);
-            saveCurrentUnitDocuments(newDocs);
+            const unitId = getCurrentUnitId();
+            
+            // Delete from Supabase
+            const { error } = await supabase
+                .from('documents')
+                .delete()
+                .eq('id', id);
+                
+            if (error) {
+                console.error('Error deleting document:', error);
+                alert('Lỗi khi xóa tài liệu!');
+                return;
+            }
+            
+            // Sync and update state
+            const updatedDocs = await syncDocumentsFromSupabase(unitId);
+            setDocuments(updatedDocs);
         }
     };
 
-    const handleSave = (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.name) return;
 
-        let newDocs: Document[];
-        if (isEditing && formData.id) {
-            newDocs = documents.map(d => d.id === formData.id ? { ...d, ...formData } as Document : d);
-        } else {
-            const newDoc: Document = {
-                ...formData,
-                id: Date.now(),
-                date: new Date().toLocaleDateString('vi-VN')
-            } as Document;
-            newDocs = [newDoc, ...documents];
+        setIsUploading(true);
+        const unitId = getCurrentUnitId();
+        let fileUrl = formData.url;
+
+        if (selectedFile) {
+            const fileExt = selectedFile.name.split('.').pop();
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+            const filePath = `${unitId}/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('documents')
+                .upload(filePath, selectedFile);
+
+            if (uploadError) {
+                console.error('Error uploading file:', uploadError);
+                alert('Lỗi khi tải file lên!');
+                setIsUploading(false);
+                return;
+            }
+
+            const { data: publicUrlData } = supabase.storage
+                .from('documents')
+                .getPublicUrl(filePath);
+                
+            fileUrl = publicUrlData.publicUrl;
         }
 
-        setDocuments(newDocs);
-        saveCurrentUnitDocuments(newDocs);
+        if (isEditing && formData.id) {
+            // Update in Supabase
+            const { error } = await supabase
+                .from('documents')
+                .update({
+                    name: formData.name,
+                    date: formData.date,
+                    size: formData.size,
+                    type: formData.type,
+                    status: formData.status,
+                    category: formData.category,
+                    file_url: fileUrl
+                })
+                .eq('id', formData.id);
+                
+            if (error) {
+                console.error('Error updating document:', error);
+                alert('Lỗi khi cập nhật tài liệu!');
+            }
+        } else {
+            // Insert into Supabase
+            const { error } = await supabase
+                .from('documents')
+                .insert({
+                    name: formData.name,
+                    date: new Date().toLocaleDateString('vi-VN'),
+                    size: formData.size,
+                    type: formData.type,
+                    status: formData.status,
+                    category: formData.category,
+                    file_url: fileUrl,
+                    unit_id: unitId
+                });
+                
+            if (error) {
+                console.error('Error adding document:', error);
+                alert('Lỗi khi thêm tài liệu!');
+            }
+        }
+
+        // After saving to Supabase, sync back to local storage and state
+        const updatedDocs = await syncDocumentsFromSupabase(unitId);
+        setDocuments(updatedDocs);
+        
+        setIsUploading(false);
         setShowForm(false);
+        setSelectedFile(null);
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const ext = file.name.split('.').pop()?.toLowerCase() || 'file';
+            setSelectedFile(file);
             setFormData({
                 ...formData,
                 name: file.name,
@@ -150,7 +236,14 @@ const DocumentManager: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredDocs.length > 0 ? (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                                        <Loader2 size={48} className="mx-auto text-blue-500 mb-3 animate-spin" />
+                                        <p className="text-sm font-medium">Đang tải tài liệu...</p>
+                                    </td>
+                                </tr>
+                            ) : filteredDocs.length > 0 ? (
                                 filteredDocs.map((doc) => (
                                     <tr key={doc.id} className="hover:bg-slate-50/50 transition-colors group">
                                         <td className="p-4">
@@ -281,9 +374,14 @@ const DocumentManager: React.FC = () => {
                                 </button>
                                 <button 
                                     type="submit" 
-                                    className="flex-1 py-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl text-sm font-bold transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                                    disabled={isUploading}
+                                    className="flex-1 py-2.5 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-bold transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
                                 >
-                                    <Check size={16} /> {isEditing ? "Cập nhật" : "Lưu tài liệu"}
+                                    {isUploading ? (
+                                        <><Loader2 size={16} className="animate-spin" /> Đang xử lý...</>
+                                    ) : (
+                                        <><Check size={16} /> {isEditing ? "Cập nhật" : "Lưu tài liệu"}</>
+                                    )}
                                 </button>
                             </div>
                         </form>
