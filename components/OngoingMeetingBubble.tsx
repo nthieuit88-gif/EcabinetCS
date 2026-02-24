@@ -99,6 +99,8 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
         // Or better: filter by day matching today if possible.
         
         const todayDate = new Date().getDate();
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
         
         // Map Booking to DailyMeeting
         const mappedMeetings: DailyMeeting[] = (data.bookings || []).map(booking => {
@@ -113,10 +115,8 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
             
             // Simple check: if day matches today
             if (booking.day === todayDate) {
-                const startTime = new Date();
-                startTime.setHours(startH, startM, 0);
-                const endTime = new Date();
-                endTime.setHours(endH, endM, 0);
+                const startTime = new Date(currentYear, currentMonth, todayDate, startH, startM, 0);
+                const endTime = new Date(currentYear, currentMonth, todayDate, endH, endM, 0);
                 
                 if (now >= startTime && now <= endTime) {
                     status = 'ongoing';

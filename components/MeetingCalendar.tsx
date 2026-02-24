@@ -53,6 +53,8 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [currentDate, setCurrentDate] = useState(new Date());
+
   useEffect(() => {
       loadData();
       
@@ -107,6 +109,75 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
       };
       return colors[type] || colors.internal;
   };
+
+  // --- Calendar Generation Logic ---
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  const generateCalendarGrid = () => {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const daysInMonth = getDaysInMonth(year, month);
+      const firstDay = getFirstDayOfMonth(year, month);
+      const daysInPrevMonth = getDaysInMonth(year, month - 1);
+
+      const grid = [];
+      let currentWeek = [];
+
+      // Previous month days
+      for (let i = 0; i < firstDay; i++) {
+          currentWeek.push({
+              day: daysInPrevMonth - firstDay + i + 1,
+              isOtherMonth: true
+          });
+      }
+
+      // Current month days
+      const today = new Date();
+      for (let i = 1; i <= daysInMonth; i++) {
+          currentWeek.push({
+              day: i,
+              isOtherMonth: false,
+              isToday: today.getDate() === i && today.getMonth() === month && today.getFullYear() === year
+          });
+
+          if (currentWeek.length === 7) {
+              grid.push(currentWeek);
+              currentWeek = [];
+          }
+      }
+
+      // Next month days
+      if (currentWeek.length > 0) {
+          let nextMonthDay = 1;
+          while (currentWeek.length < 7) {
+              currentWeek.push({
+                  day: nextMonthDay++,
+                  isOtherMonth: true
+              });
+          }
+          grid.push(currentWeek);
+      }
+
+      return grid;
+  };
+
+  const handlePrevMonth = () => {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const handleToday = () => {
+      setCurrentDate(new Date());
+  };
+
+  const monthNames = [
+      "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
+      "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"
+  ];
 
   // --- Handlers ---
 
@@ -347,18 +418,18 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                 {/* Calendar Header */}
                 <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-white">
                     <div className="flex items-center gap-4">
-                        <h3 className="text-xl font-black text-slate-800">Tháng 10, 2024</h3>
+                        <h3 className="text-xl font-black text-slate-800">{monthNames[currentDate.getMonth()]}, {currentDate.getFullYear()}</h3>
                         <div className="flex gap-1">
-                            <button className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-colors">
+                            <button onClick={handlePrevMonth} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-colors">
                                 <ChevronLeft size={16} />
                             </button>
-                            <button className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-colors">
+                            <button onClick={handleNextMonth} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-colors">
                                 <ChevronRight size={16} />
                             </button>
                         </div>
                     </div>
                     <div className="flex gap-3">
-                        <button className="hidden sm:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors">
+                        <button onClick={handleToday} className="hidden sm:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors">
                             Hôm nay
                         </button>
                         <button 
@@ -396,17 +467,21 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
 
                 {/* Calendar Grid Body */}
                 <div className="grid grid-cols-7 bg-slate-100 gap-px border-b border-slate-100">
-                    {/* Week 1 */}
-                    {[29, 30].map(d => <CalendarDay key={d} day={d} isOtherMonth onEventClick={() => {}} onDateClick={() => {}} />)}
-                    {[1, 2, 3, 4, 5].map(d => <CalendarDay key={d} day={d} events={events[d]} onEventClick={setSelectedEvent} onDateClick={handleDateClick} />)}
-
-                    {/* Week 2 */}
-                    {[6, 7, 8, 9].map(d => <CalendarDay key={d} day={d} events={events[d]} onEventClick={setSelectedEvent} onDateClick={handleDateClick} />)}
-                    <CalendarDay day={10} isToday events={events[10]} onEventClick={setSelectedEvent} onDateClick={handleDateClick} />
-                    {[11, 12].map(d => <CalendarDay key={d} day={d} events={events[d]} onEventClick={setSelectedEvent} onDateClick={handleDateClick} />)}
-
-                    {/* Week 3 */}
-                    {[13, 14, 15, 16, 17, 18, 19].map(d => <CalendarDay key={d} day={d} events={events[d]} onEventClick={setSelectedEvent} onDateClick={handleDateClick} />)}
+                    {generateCalendarGrid().map((week, weekIndex) => (
+                        <React.Fragment key={weekIndex}>
+                            {week.map((dayObj, dayIndex) => (
+                                <CalendarDay 
+                                    key={`${weekIndex}-${dayIndex}`} 
+                                    day={dayObj.day} 
+                                    isOtherMonth={dayObj.isOtherMonth} 
+                                    isToday={dayObj.isToday}
+                                    events={!dayObj.isOtherMonth ? events[dayObj.day] : undefined} 
+                                    onEventClick={setSelectedEvent} 
+                                    onDateClick={handleDateClick} 
+                                />
+                            ))}
+                        </React.Fragment>
+                    ))}
                 </div>
                 
                 {/* Footer Legend */}
@@ -427,7 +502,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                              <div className="flex flex-col">
                                  <h4 className="font-bold text-lg text-slate-800 pr-4 leading-tight">{selectedEvent.title}</h4>
                                  <span className="text-[10px] uppercase font-bold text-slate-500 bg-white/50 px-2 py-0.5 rounded mt-1 w-fit">
-                                    Ngày {selectedEvent.day}/10
+                                    Ngày {selectedEvent.day}/{currentDate.getMonth() + 1}
                                  </span>
                              </div>
                              <div className="flex gap-1">
@@ -515,7 +590,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                              <div>
                                 <h4 className="font-bold text-lg text-slate-800">
-                                    {formData.id ? "Chỉnh sửa lịch họp" : `Đặt lịch họp ngày ${formData.day}/10`}
+                                    {formData.id ? "Chỉnh sửa lịch họp" : `Đặt lịch họp ngày ${formData.day}/${currentDate.getMonth() + 1}`}
                                 </h4>
                                 <p className="text-xs text-slate-500">Điền thông tin chi tiết cuộc họp</p>
                              </div>
