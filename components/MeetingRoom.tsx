@@ -75,7 +75,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                     if (docxContainerRef.current) {
                         await renderAsync(blob, docxContainerRef.current, null, {
                             className: 'docx',
-                            inWrapper: false,
+                            inWrapper: true,
                             ignoreWidth: false,
                             ignoreHeight: false,
                             ignoreFonts: false,
@@ -175,21 +175,27 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                         title="PDF Viewer"
                     />
                 ) : doc.type === 'docx' && hasUrl ? (
-                    <div className="w-full h-full overflow-auto relative custom-scrollbar">
+                    <div className="w-full h-full overflow-auto relative custom-scrollbar bg-slate-100">
                         {loading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#525659] z-10 text-white">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 z-10 text-slate-600">
                                 <Loader2 className="animate-spin mb-2" size={32} />
                                 <span>Đang tải nội dung...</span>
                             </div>
                         )}
                         {error && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#525659] z-10 text-red-400">
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 z-10 text-red-500">
                                 <ShieldAlert className="mb-2" size={32} />
                                 <span>{error}</span>
                             </div>
                         )}
-                        <div ref={docxContainerRef} className="w-full min-h-full" />
+                        <div ref={docxContainerRef} className="w-full min-h-full flex justify-center" />
                     </div>
+                ) : doc.type === 'doc' && hasUrl ? (
+                    <iframe 
+                        src={`https://docs.google.com/gview?url=${encodeURIComponent(doc.url)}&embedded=true`}
+                        className="w-full h-full border-none bg-white" 
+                        title="DOC Viewer"
+                    />
                 ) : (
                     <div className="w-full h-full overflow-y-auto p-8 flex justify-center custom-scrollbar">
                         <div className="w-[800px] min-h-[1132px] bg-white shadow-2xl p-[60px] text-slate-900 relative">

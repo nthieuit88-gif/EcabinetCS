@@ -43,7 +43,15 @@ const DocumentRow: React.FC<{ doc: any }> = ({ doc }) => {
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {doc.url && (
                     <>
-                        <a href={doc.url} target="_blank" rel="noopener noreferrer" title="Xem" className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center"><Eye size={14} /></a>
+                        <a 
+                            href={(doc.type === 'doc' || doc.type === 'docx') ? `https://docs.google.com/gview?url=${encodeURIComponent(doc.url)}&embedded=true` : doc.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            title="Xem" 
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center"
+                        >
+                            <Eye size={14} />
+                        </a>
                         <a href={doc.url} download={doc.name} title="Tải về" className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors flex items-center justify-center"><Download size={14} /></a>
                     </>
                 )}
