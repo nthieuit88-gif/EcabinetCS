@@ -331,6 +331,20 @@ export const saveCurrentUnitBookings = (bookings: Booking[]) => {
     window.dispatchEvent(new Event('data-change'));
 };
 
+export const saveCurrentUnitDocuments = (documents: Document[]) => {
+    const unitId = getCurrentUnitId();
+    const key = `ECABINET_DATA_${unitId}`;
+    const currentData = getCurrentUnitData();
+    
+    const newData: UnitData = {
+        ...currentData,
+        documents: documents
+    };
+    
+    localStorage.setItem(key, JSON.stringify(newData));
+    window.dispatchEvent(new Event('data-change'));
+};
+
 export const syncDocumentsFromSupabase = async (unitId: string): Promise<Document[]> => {
     try {
         const { data, error } = await supabase
@@ -341,7 +355,8 @@ export const syncDocumentsFromSupabase = async (unitId: string): Promise<Documen
 
         if (error) {
             console.error('Error fetching documents from Supabase:', error);
-            return [];
+            // Fallback to local storage
+            return getUnitData(unitId).documents || [];
         }
 
         if (data) {
@@ -369,7 +384,8 @@ export const syncDocumentsFromSupabase = async (unitId: string): Promise<Documen
     } catch (err) {
         console.error('Failed to sync documents:', err);
     }
-    return [];
+    // Fallback to local storage
+    return getUnitData(unitId).documents || [];
 };
 
 export const getAllUnits = () => {

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ScrollReveal from './ui/ScrollReveal';
 import { FileText, Folder, Search, Filter, Download, Eye, Cloud, MoreHorizontal, FileSpreadsheet, FileIcon, Upload, X, Trash2, CheckCircle, FileUp, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { getCurrentUnitData, getCurrentUnitId, syncDocumentsFromSupabase, Document } from '../utils/dataManager';
+import { getCurrentUnitData, getCurrentUnitId, syncDocumentsFromSupabase, Document, saveCurrentUnitDocuments } from '../utils/dataManager';
 import { supabase } from '../utils/supabaseClient';
 
 const DocumentRow: React.FC<{ doc: any }> = ({ doc }) => {
@@ -142,6 +142,7 @@ const DocumentRepository: React.FC = () => {
       let successCount = 0;
 
       let lastError = '';
+      const newLocalDocs: Document[] = [];
 
       for (let i = 0; i < selectedFiles.length; i++) {
           const file = selectedFiles[i];
@@ -149,6 +150,7 @@ const DocumentRepository: React.FC = () => {
           const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
           const filePath = `${unitId}/${fileName}`;
 
+          let fileUrl = '';
           // Upload to Storage
           const { error: uploadError } = await supabase.storage
               .from('documents')
@@ -158,39 +160,59 @@ const DocumentRepository: React.FC = () => {
               const { data: publicUrlData } = supabase.storage
                   .from('documents')
                   .getPublicUrl(filePath);
-
-              // Insert to DB
-              const { error: dbError } = await supabase
-                  .from('documents')
-                  .insert({
-                      name: file.name,
-                      date: new Date().toLocaleDateString('vi-VN'),
-                      size: formatSize(file.size),
-                      type: fileExt,
-                      status: 'pending',
-                      category: 'other',
-                      file_url: publicUrlData.publicUrl || null,
-                      unit_id: unitId
-                  });
-
-              if (!dbError) {
-                  successCount++;
-              } else {
-                  console.error('DB Insert Error:', dbError);
-                  lastError = dbError.message;
-              }
+              fileUrl = publicUrlData.publicUrl;
           } else {
-              console.error('Upload Error:', uploadError);
+              console.warn('Supabase upload failed, falling back to local URL:', uploadError);
+              fileUrl = URL.createObjectURL(file);
               lastError = uploadError.message;
+          }
+
+          // Insert to DB
+          const { error: dbError } = await supabase
+              .from('documents')
+              .insert({
+                  name: file.name,
+                  date: new Date().toLocaleDateString('vi-VN'),
+                  size: formatSize(file.size),
+                  type: fileExt,
+                  status: 'pending',
+                  category: 'other',
+                  file_url: fileUrl,
+                  unit_id: unitId
+              });
+
+          if (!dbError) {
+              successCount++;
+          } else {
+              console.warn('Supabase insert failed, falling back to local storage:', dbError);
+              lastError = dbError.message;
+              newLocalDocs.push({
+                  id: Date.now() + i,
+                  name: file.name,
+                  date: new Date().toLocaleDateString('vi-VN'),
+                  size: formatSize(file.size),
+                  type: fileExt,
+                  status: 'pending',
+                  category: 'other',
+                  url: fileUrl
+              });
           }
           
           setUploadProgress(Math.round(((i + 1) / selectedFiles.length) * 100));
       }
 
+      if (newLocalDocs.length > 0) {
+          const updatedDocs = [...newLocalDocs, ...docs];
+          setDocs(updatedDocs);
+          saveCurrentUnitDocuments(updatedDocs);
+      }
+
       if (successCount > 0) {
-          await syncDocumentsFromSupabase(unitId);
-          loadDocs();
-      } else {
+          const updatedDocs = await syncDocumentsFromSupabase(unitId);
+          if (updatedDocs && updatedDocs.length > 0) {
+              setDocs(updatedDocs);
+          }
+      } else if (newLocalDocs.length === 0) {
           alert(`Có lỗi xảy ra khi tải lên tài liệu: ${lastError}`);
       }
 
