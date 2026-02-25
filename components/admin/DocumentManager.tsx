@@ -9,8 +9,9 @@ const DocumentManager: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<Partial<Document>>({});
-    const [selectedFile, setSelectedFile] = useState<globalThis.File | null>(null);
+    const [selectedFiles, setSelectedFiles] = useState<globalThis.File[]>([]);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -39,14 +40,14 @@ const DocumentManager: React.FC = () => {
             status: 'draft',
             category: 'other'
         });
-        setSelectedFile(null);
+        setSelectedFiles([]);
         setIsEditing(false);
         setShowForm(true);
     };
 
     const handleEdit = (doc: Document) => {
         setFormData(doc);
-        setSelectedFile(null);
+        setSelectedFiles([]);
         setIsEditing(true);
         setShowForm(true);
     };
@@ -75,36 +76,39 @@ const DocumentManager: React.FC = () => {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.name) return;
+        if (!isEditing && selectedFiles.length === 0 && !formData.name) return;
+        if (isEditing && !formData.name) return;
 
         setIsUploading(true);
+        setUploadProgress(0);
         const unitId = getCurrentUnitId();
-        let fileUrl = formData.url;
 
-        if (selectedFile) {
-            const fileExt = selectedFile.name.split('.').pop();
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-            const filePath = `${unitId}/${fileName}`;
+        if (isEditing) {
+            let fileUrl = formData.url;
+            if (selectedFiles.length > 0) {
+                const file = selectedFiles[0];
+                const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
+                const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                const filePath = `${unitId}/${fileName}`;
 
-            const { error: uploadError } = await supabase.storage
-                .from('documents')
-                .upload(filePath, selectedFile);
+                const { error: uploadError } = await supabase.storage
+                    .from('documents')
+                    .upload(filePath, file);
 
-            if (uploadError) {
-                console.error('Error uploading file:', uploadError);
-                alert('Lỗi khi tải file lên!');
-                setIsUploading(false);
-                return;
+                if (uploadError) {
+                    console.error('Error uploading file:', uploadError);
+                    alert(`Lỗi khi tải file lên: ${uploadError.message}`);
+                    setIsUploading(false);
+                    return;
+                }
+
+                const { data: publicUrlData } = supabase.storage
+                    .from('documents')
+                    .getPublicUrl(filePath);
+                    
+                fileUrl = publicUrlData.publicUrl;
             }
 
-            const { data: publicUrlData } = supabase.storage
-                .from('documents')
-                .getPublicUrl(filePath);
-                
-            fileUrl = publicUrlData.publicUrl;
-        }
-
-        if (isEditing && formData.id) {
             // Update in Supabase
             const { error } = await supabase
                 .from('documents')
@@ -125,22 +129,75 @@ const DocumentManager: React.FC = () => {
             }
         } else {
             // Insert into Supabase
-            const { error } = await supabase
-                .from('documents')
-                .insert({
-                    name: formData.name,
-                    date: new Date().toLocaleDateString('vi-VN'),
-                    size: formData.size,
-                    type: formData.type,
-                    status: formData.status,
-                    category: formData.category,
-                    file_url: fileUrl || null,
-                    unit_id: unitId
-                });
+            if (selectedFiles.length === 0) {
+                const { error } = await supabase
+                    .from('documents')
+                    .insert({
+                        name: formData.name,
+                        date: new Date().toLocaleDateString('vi-VN'),
+                        size: formData.size || '0 KB',
+                        type: formData.type || 'file',
+                        status: formData.status || 'draft',
+                        category: formData.category || 'other',
+                        file_url: null,
+                        unit_id: unitId
+                    });
+                    
+                if (error) {
+                    console.error('Error adding document:', error);
+                    alert(`Lỗi khi thêm tài liệu: ${error.message}`);
+                }
+            } else {
+                let successCount = 0;
+                let lastError = '';
                 
-            if (error) {
-                console.error('Error adding document:', error);
-                alert(`Lỗi khi thêm tài liệu: ${error.message}`);
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    const file = selectedFiles[i];
+                    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
+                    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    const filePath = `${unitId}/${fileName}`;
+
+                    const { error: uploadError } = await supabase.storage
+                        .from('documents')
+                        .upload(filePath, file);
+
+                    if (!uploadError) {
+                        const { data: publicUrlData } = supabase.storage
+                            .from('documents')
+                            .getPublicUrl(filePath);
+                            
+                        const docName = selectedFiles.length === 1 ? (formData.name || file.name) : file.name;
+
+                        const { error: dbError } = await supabase
+                            .from('documents')
+                            .insert({
+                                name: docName,
+                                date: new Date().toLocaleDateString('vi-VN'),
+                                size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+                                type: fileExt,
+                                status: formData.status || 'draft',
+                                category: formData.category || 'other',
+                                file_url: publicUrlData.publicUrl,
+                                unit_id: unitId
+                            });
+                            
+                        if (!dbError) {
+                            successCount++;
+                        } else {
+                            console.error('Error adding document:', dbError);
+                            lastError = dbError.message;
+                        }
+                    } else {
+                        console.error('Error uploading file:', uploadError);
+                        lastError = uploadError.message;
+                    }
+                    
+                    setUploadProgress(Math.round(((i + 1) / selectedFiles.length) * 100));
+                }
+                
+                if (successCount < selectedFiles.length && lastError) {
+                    alert(`Đã tải lên ${successCount}/${selectedFiles.length} tài liệu. Lỗi: ${lastError}`);
+                }
             }
         }
 
@@ -149,22 +206,35 @@ const DocumentManager: React.FC = () => {
         setDocuments(updatedDocs);
         
         setIsUploading(false);
+        setUploadProgress(0);
         setShowForm(false);
-        setSelectedFile(null);
+        setSelectedFiles([]);
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            const ext = file.name.split('.').pop()?.toLowerCase() || 'file';
-            setSelectedFile(file);
-            setFormData({
-                ...formData,
-                name: file.name,
-                size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-                type: ext
-            });
+        if (e.target.files) {
+            const newFiles = Array.from(e.target.files);
+            if (selectedFiles.length + newFiles.length > 10) {
+                alert("Bạn chỉ được phép tải lên tối đa 10 tệp một lần.");
+                return;
+            }
+            setSelectedFiles(prev => [...prev, ...newFiles]);
+            
+            if (!isEditing && newFiles.length > 0 && !formData.name) {
+                const file = newFiles[0];
+                const ext = file.name.split('.').pop()?.toLowerCase() || 'file';
+                setFormData({
+                    ...formData,
+                    name: file.name,
+                    size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+                    type: ext
+                });
+            }
         }
+    };
+
+    const removeFile = (index: number) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index));
     };
 
     const getFileIcon = (type: string) => {
@@ -317,23 +387,52 @@ const DocumentManager: React.FC = () => {
 
                         <form onSubmit={handleSave} className="p-6 space-y-5">
                             {!isEditing && (
-                                <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                                    <Upload size={32} className="mx-auto text-blue-500 mb-2" />
-                                    <p className="text-sm font-bold text-slate-700">Nhấn để chọn file tải lên</p>
-                                    <p className="text-xs text-slate-500 mt-1">Hỗ trợ PDF, DOCX, XLSX, PPTX</p>
-                                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
-                                </div>
+                                <>
+                                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                                        <Upload size={32} className="mx-auto text-blue-500 mb-2" />
+                                        <p className="text-sm font-bold text-slate-700">Nhấn để chọn file tải lên (Tối đa 10 file)</p>
+                                        <p className="text-xs text-slate-500 mt-1">Hỗ trợ PDF, DOCX, XLSX, PPTX</p>
+                                        <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                                    </div>
+                                    
+                                    {selectedFiles.length > 0 && (
+                                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                                            {selectedFiles.map((file, idx) => (
+                                                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                                    <div className="flex items-center gap-3 overflow-hidden">
+                                                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-sm">
+                                                            {getFileIcon(file.name.split('.').pop()?.toLowerCase() || '')}
+                                                        </div>
+                                                        <div className="truncate">
+                                                            <div className="text-sm font-bold text-slate-700 truncate">{file.name}</div>
+                                                            <div className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => removeFile(idx)}
+                                                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                    >
+                                                        <X size={16} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
                             )}
 
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold uppercase text-slate-500">Tên tài liệu <span className="text-red-500">*</span></label>
-                                <input 
-                                    required
-                                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                                    value={formData.name || ''}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                />
-                            </div>
+                            {(!selectedFiles || selectedFiles.length <= 1) && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold uppercase text-slate-500">Tên tài liệu <span className="text-red-500">*</span></label>
+                                    <input 
+                                        required={selectedFiles.length <= 1}
+                                        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                        value={formData.name || ''}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    />
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
@@ -378,7 +477,7 @@ const DocumentManager: React.FC = () => {
                                     className="flex-1 py-2.5 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-bold transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
                                 >
                                     {isUploading ? (
-                                        <><Loader2 size={16} className="animate-spin" /> Đang xử lý...</>
+                                        <><Loader2 size={16} className="animate-spin" /> Đang xử lý... {uploadProgress > 0 ? `${uploadProgress}%` : ''}</>
                                     ) : (
                                         <><Check size={16} /> {isEditing ? "Cập nhật" : "Lưu tài liệu"}</>
                                     )}
