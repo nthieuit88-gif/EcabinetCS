@@ -375,7 +375,15 @@ export const syncDocumentsFromSupabase = async (unitId: string): Promise<Documen
             const currentDataStr = localStorage.getItem(key);
             if (currentDataStr) {
                 const currentData = JSON.parse(currentDataStr);
-                currentData.documents = mappedDocs;
+                
+                // Preserve pending documents (local only)
+                const currentDocs = currentData.documents || [];
+                const pendingDocs = currentDocs.filter((d: Document) => d.status === 'pending');
+                
+                // Combine pending docs with remote docs
+                // Note: We might want to deduplicate if needed, but pending docs usually have temp IDs
+                currentData.documents = [...pendingDocs, ...mappedDocs];
+                
                 localStorage.setItem(key, JSON.stringify(currentData));
                 window.dispatchEvent(new Event('data-change'));
             }

@@ -9,7 +9,7 @@ import BookingManager from './components/admin/BookingManager';
 import UserManager from './components/admin/UserManager';
 import DocumentManager from './components/admin/DocumentManager';
 import { initData, getCurrentUnitId, getUserById, syncDocumentsFromSupabase } from './utils/dataManager';
-import { testSupabaseConnection } from './utils/supabaseClient';
+import { testSupabaseConnection, supabase } from './utils/supabaseClient';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -101,7 +101,20 @@ function App() {
     };
 
     window.addEventListener('unit-change', handleUnitChange);
-    return () => window.removeEventListener('unit-change', handleUnitChange);
+
+    // Set up Supabase real-time subscription for documents
+    const subscription = supabase
+      .channel('public:documents')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, payload => {
+        console.log('Change received!', payload);
+        syncDocumentsFromSupabase(getCurrentUnitId());
+      })
+      .subscribe();
+
+    return () => {
+        window.removeEventListener('unit-change', handleUnitChange);
+        supabase.removeChannel(subscription);
+    };
   }, []);
 
   return (

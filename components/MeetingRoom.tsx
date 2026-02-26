@@ -345,11 +345,17 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
         }
     }, [JSON.stringify(documents)]);
 
-    // Load repo docs when modal opens
+    // Load repo docs when modal opens and listen for changes
     useEffect(() => {
         if (showRepoModal) {
-            const data = getCurrentUnitData();
-            setRepoDocs(data.documents || []);
+            const loadRepoDocs = () => {
+                const data = getCurrentUnitData();
+                setRepoDocs(data.documents || []);
+            };
+            
+            loadRepoDocs();
+            window.addEventListener('data-change', loadRepoDocs);
+            return () => window.removeEventListener('data-change', loadRepoDocs);
         }
     }, [showRepoModal]);
 

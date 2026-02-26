@@ -24,6 +24,19 @@ const DocumentManager: React.FC = () => {
             setIsLoading(false);
         };
         loadDocs();
+
+        const handleDataChange = async () => {
+            const unitId = getCurrentUnitId();
+            const docs = await syncDocumentsFromSupabase(unitId);
+            setDocuments(docs);
+        };
+        window.addEventListener('data-change', handleDataChange);
+        window.addEventListener('unit-change', handleDataChange);
+
+        return () => {
+            window.removeEventListener('data-change', handleDataChange);
+            window.removeEventListener('unit-change', handleDataChange);
+        };
     }, []);
 
     const filteredDocs = documents.filter(doc => 
