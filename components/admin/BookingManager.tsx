@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User } from '../../utils/dataManager';
-import { Trash2, Calendar, Clock, MapPin, Search, Filter, Plus, Pencil, X, Check } from 'lucide-react';
+import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User, Document, syncDocumentsFromSupabase, getCurrentUnitId } from '../../utils/dataManager';
+import { Trash2, Calendar, Clock, MapPin, Search, Filter, Plus, Pencil, X, Check, FileText } from 'lucide-react';
 
 const BookingManager: React.FC = () => {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [rooms, setRooms] = useState<Room[]>([]);
     const [users, setUsers] = useState<User[]>([]);
+    const [documents, setDocuments] = useState<Document[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
 
@@ -26,11 +27,15 @@ const BookingManager: React.FC = () => {
         loadData();
     }, []);
 
-    const loadData = () => {
+    const loadData = async () => {
         const data = getCurrentUnitData();
         setBookings(data.bookings || []);
         setRooms(data.rooms || []);
         setUsers(data.users || []);
+        
+        const unitId = getCurrentUnitId();
+        const docs = await syncDocumentsFromSupabase(unitId);
+        setDocuments(docs);
     };
 
     const handleOpenModal = (booking?: Booking) => {
@@ -300,6 +305,44 @@ const BookingManager: React.FC = () => {
                                         <option value="external">Đối ngoại</option>
                                         <option value="training">Đào tạo</option>
                                     </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold uppercase text-slate-500">Tài liệu đính kèm</label>
+                                <div className="border border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto custom-scrollbar">
+                                    {documents.length > 0 ? documents.map(doc => (
+                                        <label key={doc.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="rounded text-blue-600 focus:ring-blue-500"
+                                                checked={formData.documents?.some((d: any) => d.name === doc.name) || false}
+                                                onChange={(e) => {
+                                                    const currentDocs = formData.documents || [];
+                                                    if (e.target.checked) {
+                                                        // Add document
+                                                        setFormData({ ...formData, documents: [...currentDocs, {
+                                                            name: doc.name,
+                                                            type: doc.type,
+                                                            size: doc.size,
+                                                            url: doc.url,
+                                                            fromRepo: true
+                                                        }] });
+                                                    } else {
+                                                        // Remove document
+                                                        setFormData({ ...formData, documents: currentDocs.filter((d: any) => d.name !== doc.name) });
+                                                    }
+                                                }}
+                                            />
+                                            <FileText size={16} className="text-slate-400" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-slate-700 truncate">{doc.name}</div>
+                                                <div className="text-[10px] text-slate-400">{doc.size} • {doc.date}</div>
+                                            </div>
+                                        </label>
+                                    )) : (
+                                        <div className="text-center py-4 text-slate-400 text-sm">Chưa có tài liệu nào trong kho</div>
+                                    )}
                                 </div>
                             </div>
 

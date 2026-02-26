@@ -152,8 +152,8 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
                     name: d.name,
                     type: d.type || 'file',
                     size: d.size || 'Unknown',
-                    url: '',
-                    fromRepo: false
+                    url: d.url || '',
+                    fromRepo: d.fromRepo || false
                 }))
             };
         });
