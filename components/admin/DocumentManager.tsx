@@ -13,6 +13,7 @@ const DocumentManager: React.FC = () => {
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [lastSynced, setLastSynced] = useState<Date | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -21,6 +22,7 @@ const DocumentManager: React.FC = () => {
             const unitId = getCurrentUnitId();
             const docs = await syncDocumentsFromSupabase(unitId);
             setDocuments(docs);
+            setLastSynced(new Date());
             setIsLoading(false);
         };
         loadDocs();
@@ -29,6 +31,7 @@ const DocumentManager: React.FC = () => {
             const unitId = getCurrentUnitId();
             const docs = await syncDocumentsFromSupabase(unitId);
             setDocuments(docs);
+            setLastSynced(new Date());
         };
         window.addEventListener('data-change', handleDataChange);
         window.addEventListener('unit-change', handleDataChange);
@@ -332,6 +335,15 @@ const DocumentManager: React.FC = () => {
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
                         <FolderOpen className="text-blue-600" /> Kho tài liệu
+                        {lastSynced && (
+                            <span className="ml-4 flex items-center gap-1.5 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                </span>
+                                Đã đồng bộ {lastSynced.toLocaleTimeString()}
+                            </span>
+                        )}
                     </h2>
                     <p className="text-sm text-slate-500 font-medium mt-1">Quản lý tài liệu dùng chung cho toàn đơn vị</p>
                 </div>

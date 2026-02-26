@@ -309,7 +309,13 @@ const BookingManager: React.FC = () => {
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold uppercase text-slate-500">Tài liệu đính kèm</label>
+                                <label className="text-xs font-bold uppercase text-slate-500 flex justify-between items-center">
+                                    Tài liệu đính kèm
+                                    <span className="text-[10px] font-normal text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                                        Đồng bộ từ Kho
+                                    </span>
+                                </label>
                                 <div className="border border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto custom-scrollbar">
                                     {documents.length > 0 ? documents.map(doc => (
                                         <label key={doc.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
