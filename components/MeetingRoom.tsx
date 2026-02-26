@@ -60,6 +60,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const docxContainerRef = useRef<HTMLDivElement>(null);
+    const [scale, setScale] = useState(1);
 
     useEffect(() => {
         const loadContent = async () => {
@@ -112,7 +113,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                 } else if (doc.type === 'txt') {
                     const response = await fetch(doc.url!);
                     const text = await response.text();
-                    setContent(`<pre class="whitespace-pre-wrap font-mono text-sm">${text}</pre>`);
+                    setContent(`<pre class="whitespace-pre-wrap font-mono text-sm bg-white p-8 shadow-lg min-h-[800px]">${text}</pre>`);
                 }
             } catch (err) {
                 console.error("Error loading document:", err);
@@ -127,6 +128,12 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
             setTimeout(loadContent, 50);
         }
     }, [doc]);
+
+    const handleZoomIn = () => setScale(prev => Math.min(prev + 0.1, 2));
+    const handleZoomOut = () => setScale(prev => Math.max(prev - 0.1, 0.5));
+    const handlePrint = () => window.print();
+
+    const isLocalFile = doc.url?.startsWith('blob:') || doc.url?.startsWith('file:');
 
     return (
         <div className="flex flex-col h-full bg-slate-900 animate-in zoom-in-95 duration-200">
@@ -153,12 +160,16 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                 
                 {/* Viewer Toolbar */}
                 <div className="flex items-center gap-1 bg-slate-700/50 p-1 rounded-lg border border-white/5">
-                    <button className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Thu nhỏ"><ZoomOut size={16} /></button>
-                    <span className="text-xs font-mono text-slate-300 w-12 text-center">100%</span>
-                    <button className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Phóng to"><ZoomIn size={16} /></button>
-                    <div className="w-px h-4 bg-white/10 mx-1"></div>
-                    <button className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="In"><Printer size={16} /></button>
-                    <button className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Tải về"><Download size={16} /></button>
+                    {!isPdf && (
+                        <>
+                            <button onClick={handleZoomOut} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Thu nhỏ"><ZoomOut size={16} /></button>
+                            <span className="text-xs font-mono text-slate-300 w-12 text-center">{Math.round(scale * 100)}%</span>
+                            <button onClick={handleZoomIn} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Phóng to"><ZoomIn size={16} /></button>
+                            <div className="w-px h-4 bg-white/10 mx-1"></div>
+                        </>
+                    )}
+                    <button onClick={handlePrint} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="In"><Printer size={16} /></button>
+                    <a href={doc.url} download={doc.name} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Tải về"><Download size={16} /></a>
                 </div>
 
                 <button onClick={onClose} className="p-2 bg-slate-700 hover:bg-red-500 text-white rounded-lg transition-colors">
@@ -175,30 +186,47 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                         title="PDF Viewer"
                     />
                 ) : doc.type === 'docx' && hasUrl ? (
-                    <div className="w-full h-full overflow-auto relative custom-scrollbar bg-slate-100">
+                    <div className="w-full h-full overflow-auto relative custom-scrollbar bg-[#525659] p-8">
                         {loading && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 z-10 text-slate-600">
                                 <Loader2 className="animate-spin mb-2" size={32} />
                                 <span>Đang tải nội dung...</span>
                             </div>
                         )}
-                        {error && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 z-10 text-red-500">
-                                <ShieldAlert className="mb-2" size={32} />
-                                <span>{error}</span>
-                            </div>
-                        )}
-                        <div ref={docxContainerRef} className="w-full min-h-full flex justify-center" />
+                        <div 
+                            ref={docxContainerRef} 
+                            className="bg-white shadow-2xl mx-auto min-h-[1000px] origin-top transition-transform duration-200 ease-out"
+                            style={{ transform: `scale(${scale})`, width: '800px' }} 
+                        />
                     </div>
-                ) : doc.type === 'doc' && hasUrl ? (
-                    <iframe 
-                        src={`https://docs.google.com/gview?url=${encodeURIComponent(doc.url)}&embedded=true`}
-                        className="w-full h-full border-none bg-white" 
-                        title="DOC Viewer"
-                    />
+                ) : (doc.type === 'doc' || doc.type === 'pptx') && hasUrl ? (
+                    isLocalFile ? (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-300 p-8 text-center">
+                            <div className="bg-slate-700 p-6 rounded-full mb-6">
+                                <FileText size={48} className="text-slate-400" />
+                            </div>
+                            <h3 className="text-xl font-bold text-white mb-2">Không thể xem trước file cục bộ</h3>
+                            <p className="max-w-md text-slate-400 mb-6">
+                                Trình duyệt không hỗ trợ xem trước trực tiếp định dạng <strong>.{doc.type}</strong> từ máy tính cá nhân.
+                                <br/>Vui lòng tải lên hệ thống hoặc tải về để xem.
+                            </p>
+                            <a href={doc.url} download={doc.name} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors flex items-center gap-2">
+                                <Download size={20} /> Tải xuống tài liệu
+                            </a>
+                        </div>
+                    ) : (
+                        <iframe 
+                            src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(doc.url!)}`}
+                            className="w-full h-full border-none bg-white" 
+                            title="Office Viewer"
+                        />
+                    )
                 ) : (
                     <div className="w-full h-full overflow-y-auto p-8 flex justify-center custom-scrollbar">
-                        <div className="w-[800px] min-h-[1132px] bg-white shadow-2xl p-[60px] text-slate-900 relative">
+                        <div 
+                            className="w-[800px] min-h-[1132px] bg-white shadow-2xl p-[60px] text-slate-900 relative origin-top transition-transform duration-200"
+                            style={{ transform: `scale(${scale})` }}
+                        >
                             {loading && (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 text-slate-500">
                                     <Loader2 className="animate-spin mb-2" size={32} />
@@ -264,24 +292,9 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                                         </div>
                                     </div>
                                     
-                                    {['doc', 'pptx'].includes(doc.type) ? (
-                                        <div className="mt-10 p-8 bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center gap-4">
-                                            <div className="h-20 w-20 bg-slate-200 rounded-full flex items-center justify-center text-slate-500">
-                                                <FileText size={40} />
-                                            </div>
-                                            <div>
-                                                <p className="text-slate-800 font-bold text-xl mb-2">Không thể xem trước định dạng này</p>
-                                                <p className="text-slate-500 text-sm max-w-md mx-auto">Định dạng .{doc.type} không được hỗ trợ xem trước trực tiếp trên trình duyệt. Vui lòng tải xuống để xem hoặc chuyển đổi sang định dạng .docx / .pdf.</p>
-                                            </div>
-                                            <a href={doc.url} download={doc.name} className="mt-4 px-6 py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition-colors flex items-center gap-2 shadow-lg shadow-teal-500/30">
-                                                <Download size={20} /> Tải xuống tài liệu
-                                            </a>
-                                        </div>
-                                    ) : (
-                                        <div className="mt-10 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700 text-center">
-                                            Đây là bản xem trước mô phỏng. Vui lòng tải xuống để xem định dạng gốc.
-                                        </div>
-                                    )}
+                                    <div className="mt-10 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700 text-center">
+                                        Đây là bản xem trước mô phỏng. Vui lòng tải xuống để xem định dạng gốc.
+                                    </div>
                                 </>
                             )}
                         </div>
