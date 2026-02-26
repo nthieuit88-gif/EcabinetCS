@@ -79,7 +79,8 @@ const DocumentManager: React.FC = () => {
                 .eq('id', id);
                 
             if (error) {
-                console.warn('Supabase delete failed, falling back to local storage:', error);
+                console.error('Supabase delete failed:', error);
+                alert(`Lỗi xóa CSDL Supabase: ${error.message}`);
                 setDocuments(prev => prev.filter(d => d.id !== id));
                 return;
             }
@@ -142,7 +143,8 @@ const DocumentManager: React.FC = () => {
                 .eq('id', formData.id);
                 
             if (error) {
-                console.warn('Supabase update failed, falling back to local storage:', error);
+                console.error('Supabase update failed:', error);
+                alert(`Lỗi cập nhật CSDL Supabase: ${error.message}`);
                 // Fallback to local storage
                 const currentDocs = [...documents];
                 const index = currentDocs.findIndex(d => d.id === formData.id);
@@ -178,7 +180,8 @@ const DocumentManager: React.FC = () => {
                     });
                     
                 if (error) {
-                    console.warn('Supabase insert failed, falling back to local storage:', error);
+                    console.error('Supabase insert failed:', error);
+                    alert(`Lỗi lưu CSDL Supabase: ${error.message}. Vui lòng kiểm tra lại cấu hình SQL.`);
                     const newDoc: Document = {
                         id: Date.now(),
                         name: formData.name || 'Untitled',
@@ -215,7 +218,8 @@ const DocumentManager: React.FC = () => {
                             .getPublicUrl(filePath);
                         fileUrl = publicUrlData.publicUrl;
                     } else {
-                        console.warn('Supabase upload failed, falling back to local URL:', uploadError);
+                        console.error('Supabase upload failed:', uploadError);
+                        alert(`Lỗi tải file lên Storage: ${uploadError.message}. Vui lòng tạo bucket 'documents'.`);
                         fileUrl = URL.createObjectURL(file);
                         lastError = uploadError.message;
                     }
@@ -238,7 +242,8 @@ const DocumentManager: React.FC = () => {
                     if (!dbError) {
                         successCount++;
                     } else {
-                        console.warn('Supabase insert failed, falling back to local storage:', dbError);
+                        console.error('Supabase insert failed:', dbError);
+                        alert(`Lỗi lưu CSDL Supabase: ${dbError.message}. Vui lòng kiểm tra lại cấu hình SQL.`);
                         lastError = dbError.message;
                         newLocalDocs.push({
                             id: Date.now() + i,
