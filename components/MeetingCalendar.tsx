@@ -316,7 +316,9 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
           const newDoc: MeetingDoc = {
               name: file.name,
               size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-              type: file.name.split('.').pop() || 'file'
+              type: file.name.split('.').pop() || 'file',
+              url: URL.createObjectURL(file),
+              fromRepo: false
           };
           setFormData({
               ...formData,
@@ -333,7 +335,9 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
       const newDoc: MeetingDoc = {
           name: doc.name,
           size: doc.size,
-          type: doc.type
+          type: doc.type,
+          url: doc.url,
+          fromRepo: true
       };
       setFormData({
           ...formData,

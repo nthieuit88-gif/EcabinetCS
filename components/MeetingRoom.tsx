@@ -23,6 +23,7 @@ interface DocItem {
     date: string;
     allowedRoles: UserRole[];
     url?: string;
+    fromRepo?: boolean;
 }
 
 interface ParticipantItem {
@@ -335,7 +336,8 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                 type: doc.type || 'file',
                 date: doc.date || new Date().toLocaleDateString('vi-VN'),
                 allowedRoles: doc.allowedRoles || ['Admin', 'Member'],
-                url: doc.url
+                url: doc.url,
+                fromRepo: doc.fromRepo
             }));
         }
         return [];
@@ -351,7 +353,8 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                 type: doc.type || 'file',
                 date: doc.date || new Date().toLocaleDateString('vi-VN'),
                 allowedRoles: doc.allowedRoles || ['Admin', 'Member'],
-                url: doc.url
+                url: doc.url,
+                fromRepo: doc.fromRepo
             })));
         } else {
             setDocs([]);
@@ -414,7 +417,9 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                     size: `${(file.size / 1024).toFixed(1)} KB`,
                     type: file.name.split('.').pop() || 'file',
                     date: new Date().toLocaleDateString('vi-VN'),
-                    allowedRoles: ['Admin', 'Member']
+                    allowedRoles: ['Admin', 'Member'],
+                    url: URL.createObjectURL(file),
+                    fromRepo: false
                 };
                 setDocs(prev => [...prev, newDoc]);
                 setIsUploading(false);

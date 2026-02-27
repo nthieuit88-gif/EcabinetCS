@@ -234,7 +234,9 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
                     documents: newDocuments.map(d => ({
                         name: d.name,
                         size: d.size,
-                        type: d.type
+                        type: d.type,
+                        url: d.url,
+                        fromRepo: d.fromRepo
                     }))
                 };
             }
