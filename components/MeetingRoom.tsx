@@ -9,6 +9,7 @@ interface MeetingRoomProps {
     meetingTitle: string;
     meetingCode: string;
     documents?: any[];
+    attendees?: any[];
     onAddDocument?: (file: File) => Promise<void>;
     onAddRepoDocuments?: (docs: Document[]) => Promise<void>;
 }
@@ -117,8 +118,13 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                     setContent(`<pre class="whitespace-pre-wrap font-mono text-sm bg-white p-8 shadow-lg min-h-[800px]">${text}</pre>`);
                 }
             } catch (err) {
-                console.error("Error loading document:", err);
-                setError("Không thể tải nội dung tài liệu. Vui lòng tải xuống để xem.");
+                // Silently handle fetch errors (e.g., expired blob URLs or CORS issues)
+                // console.warn("Document load failed:", err);
+                if (doc.url?.startsWith('blob:')) {
+                    setError("Tệp cục bộ đã hết hạn. Vui lòng tải lên lại tài liệu.");
+                } else {
+                    setError("Không thể tải nội dung tài liệu. Vui lòng tải xuống để xem.");
+                }
             } finally {
                 setLoading(false);
             }
@@ -306,7 +312,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
     );
 };
 
-const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetingCode, documents = [], onAddDocument, onAddRepoDocuments }) => {
+const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetingCode, documents = [], attendees = [], onAddDocument, onAddRepoDocuments }) => {
     const [micOn, setMicOn] = useState(true);
     const [cameraOn, setCameraOn] = useState(true);
     const [viewingDoc, setViewingDoc] = useState<DocItem | null>(null);
@@ -430,13 +436,70 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
     };
 
 
-    const [participants, setParticipants] = useState<ParticipantItem[]>([
-        { id: '1', name: "Nguyễn Văn A", initial: "A", color: "bg-gradient-to-br from-blue-500 to-blue-600", isSpeaking: true, role: 'Admin' },
-        { id: '2', name: "Trần Thị B", initial: "B", color: "bg-gradient-to-br from-purple-500 to-purple-600", isMuted: true, role: 'Member' },
-        { id: '3', name: "Lê Hoàng C", initial: "C", color: "bg-gradient-to-br from-orange-500 to-orange-600", role: 'Member' },
-        { id: '4', name: "Phạm Minh D", initial: "D", color: "bg-gradient-to-br from-indigo-500 to-indigo-600", role: 'Member' },
-        { id: '5', name: "Hoàng Thùy L", initial: "L", color: "bg-gradient-to-br from-pink-500 to-pink-600", role: 'Member' },
-    ]);
+    const [participants, setParticipants] = useState<ParticipantItem[]>(() => {
+        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+        const currentUser = storedUser ? JSON.parse(storedUser) : null;
+
+        if (attendees && attendees.length > 0) {
+            return attendees
+                .filter(user => !currentUser || user.id !== currentUser.id)
+                .map((user, index) => {
+                    const colors = [
+                        "bg-gradient-to-br from-blue-500 to-blue-600",
+                        "bg-gradient-to-br from-purple-500 to-purple-600",
+                        "bg-gradient-to-br from-orange-500 to-orange-600",
+                        "bg-gradient-to-br from-indigo-500 to-indigo-600",
+                        "bg-gradient-to-br from-pink-500 to-pink-600",
+                        "bg-gradient-to-br from-teal-500 to-teal-600"
+                    ];
+                    return {
+                        id: user.id?.toString() || index.toString(),
+                        name: user.name,
+                        initial: user.name.charAt(0).toUpperCase(),
+                        color: colors[index % colors.length],
+                        role: user.role || 'Member',
+                        isSpeaking: index === 0,
+                        isMuted: index !== 0
+                    };
+                });
+        }
+        return [
+            { id: '1', name: "Nguyễn Văn A", initial: "A", color: "bg-gradient-to-br from-blue-500 to-blue-600", isSpeaking: true, role: 'Admin' },
+            { id: '2', name: "Trần Thị B", initial: "B", color: "bg-gradient-to-br from-purple-500 to-purple-600", isMuted: true, role: 'Member' },
+            { id: '3', name: "Lê Hoàng C", initial: "C", color: "bg-gradient-to-br from-orange-500 to-orange-600", role: 'Member' },
+            { id: '4', name: "Phạm Minh D", initial: "D", color: "bg-gradient-to-br from-indigo-500 to-indigo-600", role: 'Member' },
+            { id: '5', name: "Hoàng Thùy L", initial: "L", color: "bg-gradient-to-br from-pink-500 to-pink-600", role: 'Member' },
+        ];
+    });
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+        const currentUser = storedUser ? JSON.parse(storedUser) : null;
+
+        if (attendees && attendees.length > 0) {
+            setParticipants(attendees
+                .filter(user => !currentUser || user.id !== currentUser.id)
+                .map((user, index) => {
+                    const colors = [
+                        "bg-gradient-to-br from-blue-500 to-blue-600",
+                        "bg-gradient-to-br from-purple-500 to-purple-600",
+                        "bg-gradient-to-br from-orange-500 to-orange-600",
+                        "bg-gradient-to-br from-indigo-500 to-indigo-600",
+                        "bg-gradient-to-br from-pink-500 to-pink-600",
+                        "bg-gradient-to-br from-teal-500 to-teal-600"
+                    ];
+                    return {
+                        id: user.id?.toString() || index.toString(),
+                        name: user.name,
+                        initial: user.name.charAt(0).toUpperCase(),
+                        color: colors[index % colors.length],
+                        role: user.role || 'Member',
+                        isSpeaking: index === 0,
+                        isMuted: index !== 0
+                    };
+                }));
+        }
+    }, [JSON.stringify(attendees)]);
 
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);

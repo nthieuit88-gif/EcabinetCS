@@ -345,9 +345,9 @@ const DocumentRepository: React.FC = () => {
                                             <button 
                                                 onClick={() => handlePageChange(currentPage - 1)}
                                                 disabled={currentPage === 1}
-                                                className="p-1 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 transition-colors"
+                                                className="px-2 py-1 flex items-center gap-1 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 transition-colors text-xs font-bold"
                                             >
-                                                <ChevronLeft size={16} />
+                                                <ChevronLeft size={14} /> Trước
                                             </button>
                                             <div className="flex gap-1">
                                                 {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
@@ -367,9 +367,9 @@ const DocumentRepository: React.FC = () => {
                                             <button 
                                                 onClick={() => handlePageChange(currentPage + 1)}
                                                 disabled={currentPage === totalPages}
-                                                className="p-1 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 transition-colors"
+                                                className="px-2 py-1 flex items-center gap-1 rounded hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent text-slate-600 transition-colors text-xs font-bold"
                                             >
-                                                <ChevronRight size={16} />
+                                                Sau <ChevronRight size={14} />
                                             </button>
                                         </div>
                                     </div>

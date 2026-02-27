@@ -7,6 +7,7 @@ import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, Document } 
 type MeetingStatus = 'finished' | 'ongoing' | 'upcoming';
 
 interface MeetingUser {
+    id?: number;
     name: string;
     role: string;
     status: 'online' | 'offline';
@@ -35,7 +36,7 @@ interface DailyMeeting {
 }
 
 interface OngoingMeetingBubbleProps {
-    onJoinMeeting?: (meeting: { id?: number; title: string; code: string; documents?: any[] }) => void;
+    onJoinMeeting?: (meeting: { id?: number; title: string; code: string; documents?: any[]; attendees?: any[] }) => void;
 }
 
 const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeting }) => {
@@ -142,7 +143,8 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
                 location: room ? room.name : 'Unknown',
                 status: status,
                 host: booking.attendees[0]?.name || 'Unknown',
-                attendees: booking.attendees.map(u => ({
+                attendees: (booking.attendees || []).map(u => ({
+                    id: u.id,
                     name: u.name,
                     role: u.role,
                     status: u.status === 'active' ? 'online' : 'offline'
@@ -204,7 +206,8 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
                 id: selectedMeeting.id,
                 title: selectedMeeting.title,
                 code: selectedMeeting.code,
-                documents: selectedMeeting.documents
+                documents: selectedMeeting.documents,
+                attendees: selectedMeeting.attendees
             });
         } else {
             setViewState('room');
@@ -387,6 +390,7 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
                 meetingTitle={selectedMeeting.title} 
                 meetingCode={selectedMeeting.code} 
                 documents={selectedMeeting.documents}
+                attendees={selectedMeeting.attendees}
                 onAddDocument={handleMeetingRoomAddDocument}
                 onAddRepoDocuments={handleMeetingRoomAddRepoDocuments}
             />

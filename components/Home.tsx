@@ -13,7 +13,7 @@ import MeetingRoom from './MeetingRoom';
 import { getCurrentUnitData, saveCurrentUnitBookings } from '../utils/dataManager';
 
 const Home: React.FC = () => {
-  const [activeMeeting, setActiveMeeting] = useState<{id?: number, title: string, code: string, documents?: any[]} | null>(null);
+  const [activeMeeting, setActiveMeeting] = useState<{id?: number, title: string, code: string, documents?: any[], attendees?: any[]} | null>(null);
 
   const handleAddDocument = async (file: File) => {
       if (!activeMeeting || !activeMeeting.id) return;
@@ -90,6 +90,7 @@ const Home: React.FC = () => {
               meetingTitle={activeMeeting.title} 
               meetingCode={activeMeeting.code} 
               documents={activeMeeting.documents}
+              attendees={activeMeeting.attendees}
               onLeave={() => setActiveMeeting(null)} 
               onAddDocument={handleAddDocument}
               onAddRepoDocuments={handleAddRepoDocuments}
@@ -107,7 +108,8 @@ const Home: React.FC = () => {
             id: event.id,
             title: event.title, 
             code: `MEET-${event.id}`,
-            documents: event.documents
+            documents: event.documents,
+            attendees: event.attendees
         })} />
         <DocumentRepository />
         <UserManagement />
