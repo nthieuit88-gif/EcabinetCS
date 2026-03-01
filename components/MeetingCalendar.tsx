@@ -491,7 +491,8 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
           ${isOtherMonth ? 'bg-slate-50/50 cursor-default' : 'hover:bg-blue-50/30 cursor-pointer'}
           `}
       >
-          {!isOtherMonth && currentUserRole === 'Admin' && (
+          {/* System Locked: Add Meeting Disabled */}
+          {false && !isOtherMonth && currentUserRole === 'Admin' && (
               <button 
                 onClick={(e) => {
                     e.stopPropagation();
@@ -564,6 +565,8 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                         <button onClick={handleToday} className="hidden sm:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors">
                             Hôm nay
                         </button>
+                        {/* System Locked: Add Meeting Disabled */}
+                        {false && (
                         <button 
                             onClick={() => {
                                 if (currentUserRole === 'Admin') {
@@ -578,6 +581,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                         >
                             <CalendarIcon size={14} /> <span className="hidden sm:inline">Đặt lịch họp</span>
                         </button>
+                        )}
                     </div>
                 </div>
 
@@ -631,7 +635,8 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                                  </span>
                              </div>
                              <div className="flex gap-1">
-                                 {currentUserRole === 'Admin' && (
+                                 {/* System Locked: Edit/Delete Meeting Disabled */}
+                                 {false && currentUserRole === 'Admin' && (
                                      <>
                                          <button 
                                             onClick={() => handleEditEvent(selectedEvent)}

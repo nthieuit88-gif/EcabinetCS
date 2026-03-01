@@ -916,7 +916,8 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
 
                         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar">
                             {/* Add Document Section (Admin Only) */}
-                            {currentUserRole === 'Admin' && (
+                            {/* System Locked: Add Document Disabled */}
+                            {false && currentUserRole === 'Admin' && (
                                 <div className="mb-2">
                                     {!isAddingDoc ? (
                                         <button
@@ -1017,7 +1018,8 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                                     {/* Document Actions */}
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20 bg-[#2b2f3a] pl-2 shadow-[-10px_0_10px_#2b2f3a]">
                                         {/* Admin Actions */}
-                                        {currentUserRole === 'Admin' && (
+                                        {/* System Locked: Admin Actions Disabled */}
+                                        {false && currentUserRole === 'Admin' && (
                                             <>
                                                 <button 
                                                     onClick={(e) => {e.stopPropagation(); toggleDocPermission(doc.id)}}
@@ -1070,7 +1072,8 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                             <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-400">
                                 <Users size={16} /> Thành viên ({participants.length + 1})
                             </div>
-                            {currentUserRole === 'Admin' && (
+                            {/* System Locked: Add Participant Disabled */}
+                            {false && currentUserRole === 'Admin' && (
                                 <button 
                                     onClick={() => setShowAddParticipantModal(true)}
                                     className="p-1 rounded hover:bg-white/10 text-teal-500 hover:text-teal-400 transition-colors"
@@ -1122,7 +1125,8 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                                     <button className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all">
                                         <MoreVertical size={16} />
                                     </button>
-                                    {currentUserRole === 'Admin' && (
+                                    {/* System Locked: Remove Participant Disabled */}
+                                    {false && currentUserRole === 'Admin' && (
                                         <button 
                                             onClick={() => handleRemoveParticipant(p.id, p.name)}
                                             className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all absolute right-2"
