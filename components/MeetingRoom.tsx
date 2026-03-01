@@ -76,6 +76,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
     // PDF State
     const [numPages, setNumPages] = useState<number | null>(null);
     const [pageNumber, setPageNumber] = useState(1);
+    const [flipDirection, setFlipDirection] = useState(0); // -1 for left, 1 for right
 
     const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
         setNumPages(numPages);
@@ -83,6 +84,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
     };
 
     const changePage = (offset: number) => {
+        setFlipDirection(offset);
         setPageNumber(prevPageNumber => prevPageNumber + offset);
     };
 
@@ -93,9 +95,12 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
         setPageNumber(1);
         setScale(1);
         setNumPages(null);
+        setContent(null);
     }, [doc.id]);
 
     useEffect(() => {
+        let isMounted = true;
+
         const loadContent = async () => {
             if (!hasUrl) return;
             
@@ -107,7 +112,8 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                     const response = await fetch(doc.url!);
                     if (!response.ok) throw new Error(`Failed to fetch document: ${response.statusText}`);
                     const blob = await response.blob();
-                    if (docxContainerRef.current) {
+                    
+                    if (isMounted && docxContainerRef.current) {
                         // Clear previous content
                         docxContainerRef.current.innerHTML = '';
                         await renderAsync(blob, docxContainerRef.current, null, {
@@ -123,7 +129,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                             debug: false,
                         });
                     }
-                    setLoading(false);
+                    if (isMounted) setLoading(false);
                 } else if (doc.type === 'xlsx' || doc.type === 'xls') {
                     const response = await fetch(doc.url!);
                     const arrayBuffer = await response.arrayBuffer();
@@ -146,22 +152,24 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                         `;
                     });
                     html += '</div>';
-                    setContent(html);
+                    if (isMounted) setContent(html);
                 } else if (doc.type === 'txt') {
                     const response = await fetch(doc.url!);
                     const text = await response.text();
-                    setContent(`<pre class="whitespace-pre-wrap font-mono text-sm bg-white p-8 shadow-lg min-h-[800px]">${text}</pre>`);
+                    if (isMounted) setContent(`<pre class="whitespace-pre-wrap font-mono text-sm bg-white p-8 shadow-lg min-h-[800px]">${text}</pre>`);
                 }
             } catch (err) {
                 // Silently handle fetch errors (e.g., expired blob URLs or CORS issues)
                 // console.warn("Document load failed:", err);
-                if (doc.url?.startsWith('blob:')) {
-                    setError("Tệp cục bộ đã hết hạn. Vui lòng tải lên lại tài liệu.");
-                } else {
-                    setError("Không thể tải nội dung tài liệu. Vui lòng tải xuống để xem.");
+                if (isMounted) {
+                    if (doc.url?.startsWith('blob:')) {
+                        setError("Tệp cục bộ đã hết hạn. Vui lòng tải lên lại tài liệu.");
+                    } else {
+                        setError("Không thể tải nội dung tài liệu. Vui lòng tải xuống để xem.");
+                    }
                 }
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
         };
 
@@ -169,6 +177,13 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
             // Small delay to ensure ref is attached
             setTimeout(loadContent, 50);
         }
+
+        return () => {
+            isMounted = false;
+            if (docxContainerRef.current) {
+                docxContainerRef.current.innerHTML = '';
+            }
+        };
     }, [doc]);
 
     const handleZoomIn = () => setScale(prev => Math.min(prev + 0.1, 2));
@@ -247,10 +262,41 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
             </div>
 
             {/* Viewer Body */}
-            <div className="flex-1 bg-[#525659] overflow-hidden flex justify-center relative">
+            <div className="flex-1 bg-[#525659] overflow-hidden flex justify-center relative group">
+                {/* Floating Navigation Buttons (Only for PDF) */}
+                {isPdf && hasUrl && numPages && (
+                    <>
+                        {pageNumber > 1 && (
+                            <button 
+                                onClick={previousPage}
+                                className="absolute left-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/20 hover:bg-black/50 text-white/50 hover:text-white backdrop-blur-sm transition-all hover:scale-110 opacity-0 group-hover:opacity-100"
+                                title="Trang trước"
+                            >
+                                <ChevronLeft size={32} />
+                            </button>
+                        )}
+                        {pageNumber < numPages && (
+                            <button 
+                                onClick={nextPage}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/20 hover:bg-black/50 text-white/50 hover:text-white backdrop-blur-sm transition-all hover:scale-110 opacity-0 group-hover:opacity-100"
+                                title="Trang sau"
+                            >
+                                <ChevronRight size={32} />
+                            </button>
+                        )}
+                    </>
+                )}
+
                 {isPdf && hasUrl ? (
-                    <div className="w-full h-full overflow-auto flex justify-center p-8 custom-scrollbar">
-                        <div className="shadow-2xl">
+                    <div className="w-full h-full overflow-auto flex justify-center p-8 custom-scrollbar perspective-1000">
+                        <div className={`shadow-2xl transition-transform duration-500 transform-style-3d ${flipDirection !== 0 ? 'animate-page-flip' : ''}`}
+                             key={pageNumber} // Force re-render for animation
+                             style={{
+                                 animation: flipDirection !== 0 ? `${flipDirection > 0 ? 'pageFlipInRight' : 'pageFlipInLeft'} 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)` : 'none',
+                                 transformOrigin: flipDirection > 0 ? 'left center' : 'right center'
+                             }}
+                             onAnimationEnd={() => setFlipDirection(0)}
+                        >
                             <PdfDocument
                                 file={doc.url}
                                 onLoadSuccess={onDocumentLoadSuccess}
@@ -854,7 +900,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                     {/* Document Viewer Overlay (Inside Main Column) */}
                     {viewingDoc && (
                         <div className="absolute inset-0 z-50 bg-slate-900 flex flex-col">
-                            <DocumentViewer doc={viewingDoc} onClose={() => setViewingDoc(null)} />
+                            <DocumentViewer key={viewingDoc.id} doc={viewingDoc} onClose={() => setViewingDoc(null)} />
                         </div>
                     )}
                 </div>

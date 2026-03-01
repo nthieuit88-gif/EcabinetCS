@@ -191,6 +191,36 @@ function App() {
             -webkit-mask-image: linear-gradient(to top, transparent, black);
         }
 
+        /* Page Flip Animation */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+        .transform-style-3d {
+            transform-style: preserve-3d;
+        }
+
+        @keyframes pageFlipInRight {
+            0% {
+                opacity: 0;
+                transform: rotateY(90deg);
+            }
+            100% {
+                opacity: 1;
+                transform: rotateY(0deg);
+            }
+        }
+
+        @keyframes pageFlipInLeft {
+            0% {
+                opacity: 0;
+                transform: rotateY(-90deg);
+            }
+            100% {
+                opacity: 1;
+                transform: rotateY(0deg);
+            }
+        }
+
         /* Table Styles for Document Viewer */
         .prose table {
             width: 100%;
