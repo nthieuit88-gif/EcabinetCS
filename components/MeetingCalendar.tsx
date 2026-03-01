@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ScrollReveal from './ui/ScrollReveal';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Plus, X, Video, FileText, Trash2, UserPlus, Paperclip, Search, Check, Upload, Pencil, AlertCircle, FolderOpen } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Plus, X, Video, FileText, Trash2, UserPlus, Paperclip, Search, Check, Upload, Pencil, AlertCircle, FolderOpen, UserCog } from 'lucide-react';
 import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User, Document, syncBookingsFromSupabase, getCurrentUnitId } from '../utils/dataManager';
 import { supabase } from '../utils/supabaseClient';
 
@@ -39,6 +39,26 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [availableDocs, setAvailableDocs] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Role State (Default to Admin for easier testing/usage)
+  const [currentUserRole, setCurrentUserRole] = useState<'Admin' | 'Member'>('Admin');
+
+  useEffect(() => {
+      const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+      if (storedUser) {
+          const user = JSON.parse(storedUser);
+          if (user.role === 'Admin' || user.role === 'Member') {
+              setCurrentUserRole(user.role);
+          }
+      }
+  }, []);
+
+  const toggleRole = () => {
+      const newRole = currentUserRole === 'Admin' ? 'Member' : 'Admin';
+      setCurrentUserRole(newRole);
+      // Optionally update localStorage to persist across reloads if desired, 
+      // but for this component's local toggle, state is enough.
+  };
   
   // Create/Edit Form State
   const [showForm, setShowForm] = useState(false);
@@ -218,10 +238,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
 
   const handleDateClick = (day: number) => {
       // Only Admin can create events
-      const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-      if (!storedUser) return;
-      const user = JSON.parse(storedUser);
-      if (user.role !== 'Admin') {
+      if (currentUserRole !== 'Admin') {
           alert("Bạn không có quyền tạo cuộc họp.");
           return;
       }
@@ -242,10 +259,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
 
   const handleEditEvent = (event: CalendarEvent) => {
       // Only Admin can edit
-      const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-      if (!storedUser) return;
-      const user = JSON.parse(storedUser);
-      if (user.role !== 'Admin') {
+      if (currentUserRole !== 'Admin') {
           // If not admin, just view details (which is already open)
           return; 
       }
@@ -268,10 +282,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
 
   const handleDeleteEvent = async (event: CalendarEvent) => {
       // Only Admin can delete
-      const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-      if (!storedUser) return;
-      const user = JSON.parse(storedUser);
-      if (user.role !== 'Admin') {
+      if (currentUserRole !== 'Admin') {
           alert("Bạn không có quyền xóa cuộc họp.");
           return;
       }
@@ -480,19 +491,11 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
           ${isOtherMonth ? 'bg-slate-50/50 cursor-default' : 'hover:bg-blue-50/30 cursor-pointer'}
           `}
       >
-          {!isOtherMonth && (
+          {!isOtherMonth && currentUserRole === 'Admin' && (
               <button 
                 onClick={(e) => {
                     e.stopPropagation();
-                    const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-                    if (storedUser) {
-                        const user = JSON.parse(storedUser);
-                        if (user.role === 'Admin') {
-                             onDateClick(day);
-                        } else {
-                            alert("Bạn không có quyền tạo cuộc họp.");
-                        }
-                    }
+                    onDateClick(day);
                 }}
                 className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 p-1 bg-blue-600 text-white rounded-md shadow-sm transition-opacity z-10 hover:scale-110" 
                 title="Thêm cuộc họp"
@@ -544,27 +547,33 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                             </button>
                         </div>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 items-center">
+                        <button 
+                            onClick={toggleRole}
+                            className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                                currentUserRole === 'Admin' 
+                                ? 'bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100' 
+                                : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                            }`}
+                            title="Chuyển đổi vai trò để kiểm thử"
+                        >
+                            <UserCog size={14} />
+                            {currentUserRole === 'Admin' ? 'Admin' : 'Member'}
+                        </button>
+
                         <button onClick={handleToday} className="hidden sm:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors">
                             Hôm nay
                         </button>
                         <button 
                             onClick={() => {
-                                const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-                                if (storedUser) {
-                                    const user = JSON.parse(storedUser);
-                                    if (user.role === 'Admin') {
-                                        handleDateClick(new Date().getDate());
-                                    } else {
-                                        alert("Bạn không có quyền tạo cuộc họp.");
-                                    }
+                                if (currentUserRole === 'Admin') {
+                                    handleDateClick(new Date().getDate());
+                                } else {
+                                    alert("Bạn không có quyền tạo cuộc họp.");
                                 }
                             }}
                             className={`flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg hover:shadow-teal-500/30 hover:brightness-110 transition-all ${
-                                (() => {
-                                    const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-                                    return storedUser && JSON.parse(storedUser).role !== 'Admin' ? 'opacity-50 cursor-not-allowed' : '';
-                                })()
+                                currentUserRole !== 'Admin' ? 'opacity-50 cursor-not-allowed' : ''
                             }`}
                         >
                             <CalendarIcon size={14} /> <span className="hidden sm:inline">Đặt lịch họp</span>
@@ -622,31 +631,24 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                                  </span>
                              </div>
                              <div className="flex gap-1">
-                                 {(() => {
-                                     const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-                                     const isAdmin = storedUser && JSON.parse(storedUser).role === 'Admin';
-                                     
-                                     if (!isAdmin) return null;
-
-                                     return (
-                                         <>
-                                             <button 
-                                                onClick={() => handleEditEvent(selectedEvent)}
-                                                className="p-1.5 rounded-full bg-white/50 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-colors"
-                                                title="Sửa cuộc họp"
-                                             >
-                                                <Pencil size={14} />
-                                             </button>
-                                             <button 
-                                                onClick={() => handleDeleteEvent(selectedEvent)}
-                                                className="p-1.5 rounded-full bg-white/50 hover:bg-red-100 text-slate-600 hover:text-red-600 transition-colors"
-                                                title="Xóa cuộc họp"
-                                             >
-                                                <Trash2 size={14} />
-                                             </button>
-                                         </>
-                                     );
-                                 })()}
+                                 {currentUserRole === 'Admin' && (
+                                     <>
+                                         <button 
+                                            onClick={() => handleEditEvent(selectedEvent)}
+                                            className="p-1.5 rounded-full bg-white/50 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-colors"
+                                            title="Sửa cuộc họp"
+                                         >
+                                            <Pencil size={14} />
+                                         </button>
+                                         <button 
+                                            onClick={() => handleDeleteEvent(selectedEvent)}
+                                            className="p-1.5 rounded-full bg-white/50 hover:bg-red-100 text-slate-600 hover:text-red-600 transition-colors"
+                                            title="Xóa cuộc họp"
+                                         >
+                                            <Trash2 size={14} />
+                                         </button>
+                                     </>
+                                 )}
                                  <button onClick={() => setSelectedEvent(null)} className="p-1.5 rounded-full bg-white/50 hover:bg-white text-slate-600 transition-colors">
                                      <X size={14} />
                                  </button>

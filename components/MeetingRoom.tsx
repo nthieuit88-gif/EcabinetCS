@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, FileText, X, Download, Eye, Search, ZoomIn, ZoomOut, Printer, ChevronUp, ChevronDown, MoreVertical, FileSpreadsheet, File as FileIcon, Lock, Unlock, Shield, ShieldAlert, UserCog, Users, Plus, Upload, Loader2, Database, CheckSquare, Square, ChevronLeft, ChevronRight, Trash2, Pencil } from 'lucide-react';
-import { getCurrentUnitData, Document } from '../utils/dataManager';
+import { getCurrentUnitData, Document, User } from '../utils/dataManager';
 import * as XLSX from 'xlsx';
 import { renderAsync } from 'docx-preview';
 import { Document as PdfDocument, Page as PdfPage, pdfjs } from 'react-pdf';
@@ -43,7 +43,7 @@ interface ParticipantItem {
     color: string;
     isMuted?: boolean;
     isSpeaking?: boolean;
-    role: UserRole;
+    role: string;
 }
 
 const Participant: React.FC<{ name: string; initial: string; color: string; isMuted?: boolean; isSpeaking?: boolean }> = ({ name, initial, color, isMuted, isSpeaking }) => (
@@ -418,6 +418,125 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
     // Role Based Access Control State
     const [currentUserRole, setCurrentUserRole] = useState<UserRole>('Admin');
 
+    // Participants State (Moved here to fix ReferenceError)
+    const [participants, setParticipants] = useState<ParticipantItem[]>(() => {
+        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+        const currentUser = storedUser ? JSON.parse(storedUser) : null;
+
+        if (attendees && attendees.length > 0) {
+            return attendees
+                .filter(user => !currentUser || user.id !== currentUser.id)
+                .map((user, index) => {
+                    const colors = [
+                        "bg-gradient-to-br from-blue-500 to-blue-600",
+                        "bg-gradient-to-br from-purple-500 to-purple-600",
+                        "bg-gradient-to-br from-orange-500 to-orange-600",
+                        "bg-gradient-to-br from-indigo-500 to-indigo-600",
+                        "bg-gradient-to-br from-pink-500 to-pink-600",
+                        "bg-gradient-to-br from-teal-500 to-teal-600"
+                    ];
+                    return {
+                        id: user.id?.toString() || index.toString(),
+                        name: user.name,
+                        initial: user.name.charAt(0).toUpperCase(),
+                        color: colors[index % colors.length],
+                        role: user.role || 'Member',
+                        isSpeaking: index === 0,
+                        isMuted: index !== 0
+                    };
+                });
+        }
+        return [
+            { id: '1', name: "Nguyễn Văn A", initial: "A", color: "bg-gradient-to-br from-blue-500 to-blue-600", isSpeaking: true, role: 'Admin' },
+            { id: '2', name: "Trần Thị B", initial: "B", color: "bg-gradient-to-br from-purple-500 to-purple-600", isMuted: true, role: 'Member' },
+            { id: '3', name: "Lê Hoàng C", initial: "C", color: "bg-gradient-to-br from-orange-500 to-orange-600", role: 'Member' },
+            { id: '4', name: "Phạm Minh D", initial: "D", color: "bg-gradient-to-br from-indigo-500 to-indigo-600", role: 'Member' },
+            { id: '5', name: "Hoàng Thùy L", initial: "L", color: "bg-gradient-to-br from-pink-500 to-pink-600", role: 'Member' },
+        ];
+    });
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+        const currentUser = storedUser ? JSON.parse(storedUser) : null;
+
+        if (attendees && attendees.length > 0) {
+            setParticipants(attendees
+                .filter(user => !currentUser || user.id !== currentUser.id)
+                .map((user, index) => {
+                    const colors = [
+                        "bg-gradient-to-br from-blue-500 to-blue-600",
+                        "bg-gradient-to-br from-purple-500 to-purple-600",
+                        "bg-gradient-to-br from-orange-500 to-orange-600",
+                        "bg-gradient-to-br from-indigo-500 to-indigo-600",
+                        "bg-gradient-to-br from-pink-500 to-pink-600",
+                        "bg-gradient-to-br from-teal-500 to-teal-600"
+                    ];
+                    return {
+                        id: user.id?.toString() || index.toString(),
+                        name: user.name,
+                        initial: user.name.charAt(0).toUpperCase(),
+                        color: colors[index % colors.length],
+                        role: user.role || 'Member',
+                        isSpeaking: index === 0,
+                        isMuted: index !== 0
+                    };
+                }));
+        }
+    }, [JSON.stringify(attendees)]);
+
+    // Add Participant State
+    const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
+    const [availableUsers, setAvailableUsers] = useState<User[]>([]);
+    const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+
+    // Load available users when modal opens
+    useEffect(() => {
+        if (showAddParticipantModal) {
+            const unitData = getCurrentUnitData();
+            const currentParticipantIds = participants.map(p => p.id);
+            // Filter out users who are already participants (and current user)
+            const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+            const currentUser = storedUser ? JSON.parse(storedUser) : null;
+            
+            const filteredUsers = unitData.users.filter(u => 
+                !currentParticipantIds.includes(u.id.toString()) && 
+                (!currentUser || u.id !== currentUser.id)
+            );
+            setAvailableUsers(filteredUsers);
+        }
+    }, [showAddParticipantModal, participants]);
+
+    const handleUserSelect = (id: number) => {
+        setSelectedUserIds(prev => 
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    };
+
+    const handleAddSelectedUsers = () => {
+        const newParticipants = availableUsers
+            .filter(u => selectedUserIds.includes(u.id))
+            .map(u => ({
+                id: u.id.toString(),
+                name: u.name,
+                initial: u.name.charAt(0).toUpperCase(),
+                color: u.avatarColor,
+                role: u.role,
+                isMuted: true,
+                isSpeaking: false
+            }));
+        
+        setParticipants(prev => [...prev, ...newParticipants]);
+        setShowAddParticipantModal(false);
+        setSelectedUserIds([]);
+    };
+
+    const handleRemoveParticipant = (participantId: string, participantName: string) => {
+        if (currentUserRole !== 'Admin') return;
+        if (window.confirm(`Bạn có chắc chắn muốn mời thành viên "${participantName}" ra khỏi phòng?`)) {
+            setParticipants(prev => prev.filter(p => p.id !== participantId));
+        }
+    };
+
     // Documents state with Permissions
     const [docs, setDocs] = useState<DocItem[]>(() => {
         if (documents && documents.length > 0) {
@@ -524,70 +643,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
     };
 
 
-    const [participants, setParticipants] = useState<ParticipantItem[]>(() => {
-        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-        const currentUser = storedUser ? JSON.parse(storedUser) : null;
 
-        if (attendees && attendees.length > 0) {
-            return attendees
-                .filter(user => !currentUser || user.id !== currentUser.id)
-                .map((user, index) => {
-                    const colors = [
-                        "bg-gradient-to-br from-blue-500 to-blue-600",
-                        "bg-gradient-to-br from-purple-500 to-purple-600",
-                        "bg-gradient-to-br from-orange-500 to-orange-600",
-                        "bg-gradient-to-br from-indigo-500 to-indigo-600",
-                        "bg-gradient-to-br from-pink-500 to-pink-600",
-                        "bg-gradient-to-br from-teal-500 to-teal-600"
-                    ];
-                    return {
-                        id: user.id?.toString() || index.toString(),
-                        name: user.name,
-                        initial: user.name.charAt(0).toUpperCase(),
-                        color: colors[index % colors.length],
-                        role: user.role || 'Member',
-                        isSpeaking: index === 0,
-                        isMuted: index !== 0
-                    };
-                });
-        }
-        return [
-            { id: '1', name: "Nguyễn Văn A", initial: "A", color: "bg-gradient-to-br from-blue-500 to-blue-600", isSpeaking: true, role: 'Admin' },
-            { id: '2', name: "Trần Thị B", initial: "B", color: "bg-gradient-to-br from-purple-500 to-purple-600", isMuted: true, role: 'Member' },
-            { id: '3', name: "Lê Hoàng C", initial: "C", color: "bg-gradient-to-br from-orange-500 to-orange-600", role: 'Member' },
-            { id: '4', name: "Phạm Minh D", initial: "D", color: "bg-gradient-to-br from-indigo-500 to-indigo-600", role: 'Member' },
-            { id: '5', name: "Hoàng Thùy L", initial: "L", color: "bg-gradient-to-br from-pink-500 to-pink-600", role: 'Member' },
-        ];
-    });
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
-        const currentUser = storedUser ? JSON.parse(storedUser) : null;
-
-        if (attendees && attendees.length > 0) {
-            setParticipants(attendees
-                .filter(user => !currentUser || user.id !== currentUser.id)
-                .map((user, index) => {
-                    const colors = [
-                        "bg-gradient-to-br from-blue-500 to-blue-600",
-                        "bg-gradient-to-br from-purple-500 to-purple-600",
-                        "bg-gradient-to-br from-orange-500 to-orange-600",
-                        "bg-gradient-to-br from-indigo-500 to-indigo-600",
-                        "bg-gradient-to-br from-pink-500 to-pink-600",
-                        "bg-gradient-to-br from-teal-500 to-teal-600"
-                    ];
-                    return {
-                        id: user.id?.toString() || index.toString(),
-                        name: user.name,
-                        initial: user.name.charAt(0).toUpperCase(),
-                        color: colors[index % colors.length],
-                        role: user.role || 'Member',
-                        isSpeaking: index === 0,
-                        isMuted: index !== 0
-                    };
-                }));
-        }
-    }, [JSON.stringify(attendees)]);
 
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
@@ -964,8 +1020,19 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
 
                      {/* Participants Section */}
                      <div className="h-1/3 flex flex-col min-h-[180px] bg-[#1a1c23]/50 border-t border-white/5">
-                        <div className="h-10 flex items-center px-4 shrink-0 bg-[#1a1c23] border-b border-white/5 gap-2 text-sm font-bold uppercase tracking-wider text-slate-400">
-                            <Users size={16} /> Thành viên ({participants.length + 1})
+                        <div className="h-10 flex items-center justify-between px-4 shrink-0 bg-[#1a1c23] border-b border-white/5 gap-2">
+                            <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-400">
+                                <Users size={16} /> Thành viên ({participants.length + 1})
+                            </div>
+                            {currentUserRole === 'Admin' && (
+                                <button 
+                                    onClick={() => setShowAddParticipantModal(true)}
+                                    className="p-1 rounded hover:bg-white/10 text-teal-500 hover:text-teal-400 transition-colors"
+                                    title="Thêm thành viên"
+                                >
+                                    <Plus size={16} />
+                                </button>
+                            )}
                         </div>
                         
                         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar">
@@ -1009,6 +1076,15 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                                     <button className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all">
                                         <MoreVertical size={16} />
                                     </button>
+                                    {currentUserRole === 'Admin' && (
+                                        <button 
+                                            onClick={() => handleRemoveParticipant(p.id, p.name)}
+                                            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all absolute right-2"
+                                            title="Mời ra khỏi phòng"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -1018,6 +1094,65 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
             </div>
 
 
+
+            {/* Add Participant Modal */}
+            {showAddParticipantModal && (
+                <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+                    <div className="w-full max-w-md bg-slate-900 rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-slate-800">
+                            <h3 className="font-bold text-white flex items-center gap-2">
+                                <Users size={18} className="text-teal-400" /> Thêm thành viên
+                            </h3>
+                            <button onClick={() => setShowAddParticipantModal(false)} className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-4 overflow-y-auto custom-scrollbar space-y-2 flex-1">
+                            {availableUsers.length === 0 ? (
+                                <div className="text-center text-slate-500 py-8">
+                                    Không còn thành viên nào để thêm.
+                                </div>
+                            ) : (
+                                availableUsers.map(user => {
+                                    const isSelected = selectedUserIds.includes(user.id);
+                                    return (
+                                        <div 
+                                            key={user.id}
+                                            onClick={() => handleUserSelect(user.id)}
+                                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                                                isSelected 
+                                                ? 'bg-teal-500/20 border-teal-500/50' 
+                                                : 'bg-slate-800 border-white/5 hover:border-white/20'
+                                            }`}
+                                        >
+                                            <div className={isSelected ? 'text-teal-400' : 'text-slate-500'}>
+                                                {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+                                            </div>
+                                            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white font-bold text-xs ${user.avatarColor}`}>
+                                                {user.name.charAt(0).toUpperCase()}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className={`text-sm font-bold truncate ${isSelected ? 'text-white' : 'text-slate-300'}`}>{user.name}</div>
+                                                <div className="text-[10px] text-slate-500">{user.role} • {user.dept}</div>
+                                            </div>
+                                        </div>
+                                    )
+                                })
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-white/10 bg-slate-800 flex justify-end gap-3">
+                             <button onClick={() => setShowAddParticipantModal(false)} className="px-4 py-2 rounded-lg text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5">Hủy</button>
+                             <button 
+                                onClick={handleAddSelectedUsers}
+                                disabled={selectedUserIds.length === 0}
+                                className="px-4 py-2 rounded-lg text-sm font-bold bg-teal-600 text-white hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                             >
+                                Thêm ({selectedUserIds.length})
+                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Repo Modal */}
             {showRepoModal && (
