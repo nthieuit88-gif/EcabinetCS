@@ -118,7 +118,7 @@ const AdminLayout: React.FC = () => {
                 </div>
             </div>
         </header>
-        <div className="p-8 max-w-7xl mx-auto">
+        <div className="p-8 w-full">
             <Outlet />
         </div>
       </main>

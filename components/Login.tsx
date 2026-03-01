@@ -41,7 +41,36 @@ const Login = () => {
     user.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const performLogin = (user: User) => {
+      // Generate Session ID
+      const sessionId = crypto.randomUUID();
+      
+      // Update "Database" with new session ID
+      updateUserSession(user.id, sessionId, user.unitId);
+      
+      // Store session ID locally
+      localStorage.setItem('ECABINET_SESSION_ID', sessionId);
+
+      // Login success
+      localStorage.setItem('ECABINET_AUTH_USER', JSON.stringify(user));
+      
+      // Ensure we switch to the user's unit
+      if (user.unitId) {
+          setCurrentUnitId(user.unitId);
+      }
+      
+      window.dispatchEvent(new Event('auth-change'));
+      
+      navigate('/');
+  };
+
   const handleUserClick = (user: User) => {
+    // Temporary Bypass: Allow all users in "unit_1" to login without password, except Admin
+    if (user.unitId === 'unit_1' && user.role !== 'Admin') {
+        performLogin(user);
+        return;
+    }
+
     setSelectedUser(user);
     setPassword('');
     setError('');
@@ -60,26 +89,7 @@ const Login = () => {
     }
 
     if (password === validPassword) {
-      // Generate Session ID
-      const sessionId = crypto.randomUUID();
-      
-      // Update "Database" with new session ID
-      updateUserSession(selectedUser.id, sessionId, selectedUser.unitId);
-      
-      // Store session ID locally
-      localStorage.setItem('ECABINET_SESSION_ID', sessionId);
-
-      // Login success
-      localStorage.setItem('ECABINET_AUTH_USER', JSON.stringify(selectedUser));
-      
-      // Ensure we switch to the user's unit
-      if (selectedUser.unitId) {
-          setCurrentUnitId(selectedUser.unitId);
-      }
-      
-      window.dispatchEvent(new Event('auth-change'));
-      
-      navigate('/');
+      performLogin(selectedUser);
     } else {
       setError('Mật khẩu không đúng. Vui lòng thử lại.');
     }

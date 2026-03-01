@@ -106,7 +106,7 @@ const Pricing: React.FC = () => {
                     {/* Gói 2 */}
                     <PricingCard 
                         title="Gói Tiêu chuẩn"
-                        price="1.400.000đ"
+                        price="1.399.000đ"
                         period="/tháng"
                         description="Giải pháp tối ưu cho doanh nghiệp vừa và nhỏ (SME)."
                         icon={Crown}

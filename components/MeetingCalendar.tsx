@@ -491,8 +491,8 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
           ${isOtherMonth ? 'bg-slate-50/50 cursor-default' : 'hover:bg-blue-50/30 cursor-pointer'}
           `}
       >
-          {/* System Locked: Add Meeting Disabled */}
-          {false && !isOtherMonth && currentUserRole === 'Admin' && (
+          {/* Add Meeting Button (Enabled) */}
+          {!isOtherMonth && currentUserRole === 'Admin' && (
               <button 
                 onClick={(e) => {
                     e.stopPropagation();
@@ -533,7 +533,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
             </ScrollReveal>
         </div>
 
-        <ScrollReveal delay={100} className="relative z-10">
+        <div className="relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="mx-auto max-w-5xl rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
                 {/* Calendar Header */}
                 <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-white">
@@ -565,8 +565,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                         <button onClick={handleToday} className="hidden sm:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors">
                             Hôm nay
                         </button>
-                        {/* System Locked: Add Meeting Disabled */}
-                        {false && (
+                        {/* Add Meeting Button (Enabled) */}
                         <button 
                             onClick={() => {
                                 if (currentUserRole === 'Admin') {
@@ -581,7 +580,6 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                         >
                             <CalendarIcon size={14} /> <span className="hidden sm:inline">Đặt lịch họp</span>
                         </button>
-                        )}
                     </div>
                 </div>
 
@@ -635,8 +633,8 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                                  </span>
                              </div>
                              <div className="flex gap-1">
-                                 {/* System Locked: Edit/Delete Meeting Disabled */}
-                                 {false && currentUserRole === 'Admin' && (
+                                 {/* Edit/Delete Meeting Buttons (Enabled) */}
+                                 {currentUserRole === 'Admin' && (
                                      <>
                                          <button 
                                             onClick={() => handleEditEvent(selectedEvent)}
@@ -996,7 +994,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                 </div>
             )}
 
-        </ScrollReveal>
+        </div>
       </div>
     </section>
   );

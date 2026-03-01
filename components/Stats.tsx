@@ -18,8 +18,8 @@ const StatItem: React.FC<{ to: number; label: string; suffix?: string; decimals?
 const Stats: React.FC = () => {
   return (
     <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <StatItem to={45} label="Giảm thời gian chuẩn bị" suffix="%" />
-        <StatItem to={60} label="Tốc độ phê duyệt nhanh hơn" suffix="%" delay={60} />
+        <StatItem to={80} label="Giảm thời gian chuẩn bị" suffix="%" />
+        <StatItem to={90} label="Tốc độ phê duyệt nhanh hơn" suffix="%" delay={60} />
         <StatItem to={99.9} label="Thời gian hoạt động (SLA)" suffix="%" decimals={1} delay={120} />
     </div>
   );

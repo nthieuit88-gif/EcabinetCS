@@ -427,13 +427,14 @@ export const syncUsersFromSupabase = async (unitId: string): Promise<User[]> => 
                 // If user doesn't exist locally (e.g. new user), add them.
                 // But primarily we want to preserve local mock users and just update their session/status.
                 
-                const localUsersMap = new Map(currentData.users.map((u: User) => [u.id, u]));
+                const localUsersMap = new Map<number, User>(currentData.users.map((u: User) => [u.id, u]));
                 
                 mappedUsers.forEach(remoteUser => {
                     if (localUsersMap.has(remoteUser.id)) {
                         // Update existing user
+                        const existingUser = localUsersMap.get(remoteUser.id)!;
                         localUsersMap.set(remoteUser.id, {
-                            ...localUsersMap.get(remoteUser.id)!,
+                            ...existingUser,
                             currentSessionId: remoteUser.currentSessionId,
                             // Update other fields if needed, but be careful not to break mock data structure
                             status: remoteUser.status

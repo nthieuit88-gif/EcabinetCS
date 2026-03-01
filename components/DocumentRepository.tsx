@@ -295,10 +295,10 @@ const DocumentRepository: React.FC = () => {
       <div className="container mx-auto px-4 sm:px-6">
         <div className="grid lg:grid-cols-12 gap-8 items-start">
             
-            {/* Left Column: Interactive UI */}
-            <div className="order-2 lg:order-1 lg:col-span-7">
+            {/* Main Content: Interactive UI - Expanded to full width */}
+            <div className="order-2 lg:order-1 lg:col-span-12">
                 <ScrollReveal>
-                    <div className="relative rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col h-[520px]">
+                    <div className="relative rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col h-[600px]">
                         {/* Header App */}
                         <div className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-2.5">
                             <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
@@ -462,8 +462,8 @@ const DocumentRepository: React.FC = () => {
                 </ScrollReveal>
             </div>
 
-            {/* Right Column: Description */}
-            <div className="order-1 lg:order-2 lg:col-span-5">
+            {/* Right Column: Description - Hidden for Admin view */}
+            <div className="hidden">
                 <ScrollReveal delay={100}>
                     <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[10px] font-bold text-blue-600 mb-3">
                         <span className="relative flex h-1.5 w-1.5">
