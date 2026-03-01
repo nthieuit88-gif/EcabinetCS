@@ -345,6 +345,48 @@ export const saveCurrentUnitDocuments = (documents: Document[]) => {
     window.dispatchEvent(new Event('data-change'));
 };
 
+export const syncUsersFromSupabase = async (unitId: string): Promise<User[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('unit_id', unitId)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching users from Supabase:', error);
+            return getUnitData(unitId).users || [];
+        }
+
+        if (data && data.length > 0) {
+            const mappedUsers: User[] = data.map(u => ({
+                id: u.id,
+                name: u.name,
+                role: u.role,
+                dept: u.dept,
+                status: u.status as any,
+                avatarColor: u.avatar_color,
+                email: u.email,
+                unitId: u.unit_id,
+                currentSessionId: u.current_session_id
+            }));
+
+            const key = `ECABINET_DATA_${unitId}`;
+            const currentDataStr = localStorage.getItem(key);
+            if (currentDataStr) {
+                const currentData = JSON.parse(currentDataStr);
+                currentData.users = mappedUsers;
+                localStorage.setItem(key, JSON.stringify(currentData));
+                window.dispatchEvent(new Event('data-change'));
+            }
+            return mappedUsers;
+        }
+    } catch (err) {
+        console.error('Failed to sync users:', err);
+    }
+    return getUnitData(unitId).users || [];
+};
+
 export const syncDocumentsFromSupabase = async (unitId: string): Promise<Document[]> => {
     try {
         const { data, error } = await supabase
@@ -381,8 +423,11 @@ export const syncDocumentsFromSupabase = async (unitId: string): Promise<Documen
                 const pendingDocs = currentDocs.filter((d: Document) => d.status === 'pending');
                 
                 // Combine pending docs with remote docs
-                // Note: We might want to deduplicate if needed, but pending docs usually have temp IDs
-                currentData.documents = [...pendingDocs, ...mappedDocs];
+                // Deduplicate by ID to avoid "Encountered two children with the same key" error
+                const existingIds = new Set(mappedDocs.map(d => d.id));
+                const uniquePendingDocs = pendingDocs.filter((d: Document) => !existingIds.has(d.id));
+                
+                currentData.documents = [...uniquePendingDocs, ...mappedDocs];
                 
                 localStorage.setItem(key, JSON.stringify(currentData));
                 window.dispatchEvent(new Event('data-change'));
@@ -394,6 +439,64 @@ export const syncDocumentsFromSupabase = async (unitId: string): Promise<Documen
     }
     // Fallback to local storage
     return getUnitData(unitId).documents || [];
+};
+
+export const syncBookingsFromSupabase = async (unitId: string): Promise<Booking[]> => {
+    // Sync rooms first to avoid foreign key issues
+    const unitData = getUnitData(unitId);
+    if (unitData.rooms && unitData.rooms.length > 0) {
+        try {
+            const roomsToSync = unitData.rooms.map(r => ({
+                id: r.id,
+                name: r.name,
+                capacity: r.capacity || 0,
+                unit_id: unitId
+            }));
+            await supabase.from('rooms').upsert(roomsToSync, { onConflict: 'id' });
+        } catch (err) {
+            console.warn('Room sync failed, but continuing...', err);
+        }
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('bookings')
+            .select('*')
+            .eq('unit_id', unitId)
+            .order('day', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching bookings from Supabase:', error);
+            return getUnitData(unitId).bookings || [];
+        }
+
+        if (data) {
+            const mappedBookings: Booking[] = data.map(b => ({
+                id: b.id,
+                day: b.day,
+                title: b.title,
+                startTime: b.start_time,
+                endTime: b.end_time,
+                roomId: b.room_id,
+                type: b.type as any,
+                attendees: b.attendees || [],
+                documents: b.documents || []
+            }));
+
+            const key = `ECABINET_DATA_${unitId}`;
+            const currentDataStr = localStorage.getItem(key);
+            if (currentDataStr) {
+                const currentData = JSON.parse(currentDataStr);
+                currentData.bookings = mappedBookings;
+                localStorage.setItem(key, JSON.stringify(currentData));
+                window.dispatchEvent(new Event('data-change'));
+            }
+            return mappedBookings;
+        }
+    } catch (err) {
+        console.error('Failed to sync bookings:', err);
+    }
+    return getUnitData(unitId).bookings || [];
 };
 
 export const getAllUnits = () => {

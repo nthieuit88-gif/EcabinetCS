@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User, Document, syncDocumentsFromSupabase, getCurrentUnitId } from '../../utils/dataManager';
-import { Trash2, Calendar, Clock, MapPin, Search, Filter, Plus, Pencil, X, Check, FileText } from 'lucide-react';
+import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User, Document, syncDocumentsFromSupabase, getCurrentUnitId, syncBookingsFromSupabase } from '../../utils/dataManager';
+import { Trash2, Calendar, Clock, MapPin, Search, Filter, Plus, Pencil, X, Check, FileText, Loader2 } from 'lucide-react';
+import { supabase } from '../../utils/supabaseClient';
 
 const BookingManager: React.FC = () => {
     const [bookings, setBookings] = useState<Booking[]>([]);
@@ -9,6 +10,7 @@ const BookingManager: React.FC = () => {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState('all');
+    const [isLoading, setIsLoading] = useState(true);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
@@ -28,14 +30,20 @@ const BookingManager: React.FC = () => {
     }, []);
 
     const loadData = async () => {
+        setIsLoading(true);
+        const unitId = getCurrentUnitId();
+        
+        // Sync bookings first
+        await syncBookingsFromSupabase(unitId);
+        
         const data = getCurrentUnitData();
         setBookings(data.bookings || []);
         setRooms(data.rooms || []);
         setUsers(data.users || []);
         
-        const unitId = getCurrentUnitId();
         const docs = await syncDocumentsFromSupabase(unitId);
         setDocuments(docs);
+        setIsLoading(false);
     };
 
     const handleOpenModal = (booking?: Booking) => {
@@ -63,33 +71,100 @@ const BookingManager: React.FC = () => {
         setEditingBooking(null);
     };
 
-    const handleSave = (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.title || !formData.roomId) return;
 
-        let newBookings = [...bookings];
-        if (editingBooking) {
-            newBookings = newBookings.map(b => b.id === editingBooking.id ? { ...formData, id: editingBooking.id } as Booking : b);
-        } else {
-            const newBooking: Booking = {
-                ...formData as Booking,
-                id: Date.now(),
+        setIsLoading(true);
+        try {
+            const unitId = getCurrentUnitId();
+            const bookingId = editingBooking ? editingBooking.id : Date.now();
+            
+            const bookingData = {
+                id: bookingId,
+                unit_id: unitId,
+                day: formData.day,
+                title: formData.title,
+                start_time: formData.startTime,
+                end_time: formData.endTime,
+                room_id: formData.roomId,
+                type: formData.type,
                 attendees: formData.attendees || [],
                 documents: formData.documents || []
             };
-            newBookings.push(newBooking);
-        }
 
-        saveCurrentUnitBookings(newBookings);
-        setBookings(newBookings);
-        handleCloseModal();
-    };
+            let error;
+            if (editingBooking) {
+                const { error: updateError } = await supabase
+                    .from('bookings')
+                    .update(bookingData)
+                    .eq('id', editingBooking.id);
+                error = updateError;
+            } else {
+                const { error: insertError } = await supabase
+                    .from('bookings')
+                    .insert([bookingData]);
+                error = insertError;
+            }
 
-    const handleDelete = (id: number) => {
-        if (window.confirm('Bạn có chắc chắn muốn xóa lịch đặt này?')) {
-            const newBookings = bookings.filter(b => b.id !== id);
+            if (error) {
+                console.error('Error saving booking to Supabase:', error);
+            }
+
+            // Update local state
+            let newBookings = [...bookings];
+            const newBooking: Booking = {
+                ...formData as Booking,
+                id: bookingId,
+                attendees: formData.attendees || [],
+                documents: formData.documents || []
+            };
+
+            if (editingBooking) {
+                newBookings = newBookings.map(b => b.id === editingBooking.id ? newBooking : b);
+            } else {
+                newBookings.push(newBooking);
+            }
+
             saveCurrentUnitBookings(newBookings);
             setBookings(newBookings);
+            
+            // Re-sync
+            await syncBookingsFromSupabase(unitId);
+            handleCloseModal();
+        } catch (err) {
+            console.error('Failed to save booking:', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDelete = async (id: number) => {
+        if (window.confirm('Bạn có chắc chắn muốn xóa lịch đặt này?')) {
+            setIsLoading(true);
+            try {
+                const unitId = getCurrentUnitId();
+                
+                const { error } = await supabase
+                    .from('bookings')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) {
+                    console.error('Error deleting booking from Supabase:', error);
+                }
+
+                const newBookings = bookings.filter(b => b.id !== id);
+                saveCurrentUnitBookings(newBookings);
+                setBookings(newBookings);
+                
+                // Re-sync
+                await syncBookingsFromSupabase(unitId);
+            } catch (err) {
+                console.error('Failed to delete booking:', err);
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
@@ -152,7 +227,14 @@ const BookingManager: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredBookings.map(booking => (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                                        <Loader2 size={48} className="mx-auto text-blue-500 mb-3 animate-spin" />
+                                        <p className="text-sm font-medium">Đang tải dữ liệu...</p>
+                                    </td>
+                                </tr>
+                            ) : filteredBookings.map(booking => (
                                 <tr key={booking.id} className="hover:bg-slate-50/50 transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-slate-800">{booking.title}</div>

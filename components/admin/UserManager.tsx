@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { getCurrentUnitData, saveCurrentUnitUsers, User } from '../../utils/dataManager';
-import { Plus, Pencil, Trash2, X, Check, Search, Mail, User as UserIcon, Briefcase, Shield } from 'lucide-react';
+import { getCurrentUnitData, saveCurrentUnitUsers, User, syncUsersFromSupabase, getCurrentUnitId } from '../../utils/dataManager';
+import { Plus, Pencil, Trash2, X, Check, Search, Mail, User as UserIcon, Briefcase, Shield, Loader2 } from 'lucide-react';
+import { supabase } from '../../utils/supabaseClient';
 
 const UserManager: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [formData, setFormData] = useState<Partial<User>>({
         name: '',
@@ -18,11 +20,30 @@ const UserManager: React.FC = () => {
 
     useEffect(() => {
         loadUsers();
+        
+        const handleDataChange = () => loadUsers();
+        window.addEventListener('data-change', handleDataChange);
+        window.addEventListener('unit-change', handleDataChange);
+        
+        return () => {
+            window.removeEventListener('data-change', handleDataChange);
+            window.removeEventListener('unit-change', handleDataChange);
+        };
     }, []);
 
-    const loadUsers = () => {
-        const data = getCurrentUnitData();
-        setUsers(data.users || []);
+    const loadUsers = async () => {
+        setIsLoading(true);
+        const unitId = getCurrentUnitId();
+        
+        // Try to sync from Supabase
+        const syncedUsers = await syncUsersFromSupabase(unitId);
+        if (syncedUsers && syncedUsers.length > 0) {
+            setUsers(syncedUsers);
+        } else {
+            const data = getCurrentUnitData();
+            setUsers(data.users || []);
+        }
+        setIsLoading(false);
     };
 
     const handleOpenModal = (user?: User) => {
@@ -60,30 +81,80 @@ const UserManager: React.FC = () => {
         return colors[Math.floor(Math.random() * colors.length)];
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.name || !formData.email) return;
 
+        const unitId = getCurrentUnitId();
         let newUsers = [...users];
+        
         if (editingUser) {
-            newUsers = newUsers.map(u => u.id === editingUser.id ? { ...formData, id: editingUser.id } as User : u);
+            const updatedUser = { ...formData, id: editingUser.id } as User;
+            newUsers = newUsers.map(u => u.id === editingUser.id ? updatedUser : u);
+            
+            // Update in Supabase
+            const { error } = await supabase
+                .from('users')
+                .update({
+                    name: updatedUser.name,
+                    email: updatedUser.email,
+                    role: updatedUser.role,
+                    dept: updatedUser.dept,
+                    status: updatedUser.status,
+                    avatar_color: updatedUser.avatarColor
+                })
+                .eq('id', updatedUser.id);
+                
+            if (error) console.error("Supabase update error:", error);
         } else {
             const newUser: User = {
                 ...formData as User,
                 id: Date.now(),
+                unitId: unitId
             };
             newUsers.push(newUser);
+            
+            // Insert into Supabase
+            const { error } = await supabase
+                .from('users')
+                .insert({
+                    id: newUser.id,
+                    name: newUser.name,
+                    email: newUser.email,
+                    role: newUser.role,
+                    dept: newUser.dept,
+                    status: newUser.status,
+                    avatar_color: newUser.avatarColor,
+                    unit_id: unitId
+                });
+                
+            if (error) console.error("Supabase insert error:", error);
         }
 
         saveCurrentUnitUsers(newUsers);
         setUsers(newUsers);
         handleCloseModal();
+        
+        // Refresh from Supabase to ensure consistency
+        syncUsersFromSupabase(unitId);
     };
 
-    const handleDelete = (id: number) => {
+    const handleDelete = async (id: number) => {
         if (window.confirm('Bạn có chắc chắn muốn xóa nhân sự này?')) {
+            const unitId = getCurrentUnitId();
             const newUsers = users.filter(u => u.id !== id);
             saveCurrentUnitUsers(newUsers);
             setUsers(newUsers);
+            
+            // Delete from Supabase
+            const { error } = await supabase
+                .from('users')
+                .delete()
+                .eq('id', id);
+                
+            if (error) console.error("Supabase delete error:", error);
+            
+            // Refresh from Supabase
+            syncUsersFromSupabase(unitId);
         }
     };
 
@@ -132,7 +203,14 @@ const UserManager: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredUsers.map(user => (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 text-sm">
+                                        <Loader2 className="animate-spin mx-auto mb-2" size={24} />
+                                        Đang tải dữ liệu...
+                                    </td>
+                                </tr>
+                            ) : filteredUsers.map(user => (
                                 <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">

@@ -1,8 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, FileText, X, Download, Eye, Search, ZoomIn, ZoomOut, Printer, ChevronUp, ChevronDown, MoreVertical, FileSpreadsheet, File as FileIcon, Lock, Unlock, Shield, ShieldAlert, UserCog, Users, Plus, Upload, Loader2, Database, CheckSquare, Square } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, FileText, X, Download, Eye, Search, ZoomIn, ZoomOut, Printer, ChevronUp, ChevronDown, MoreVertical, FileSpreadsheet, File as FileIcon, Lock, Unlock, Shield, ShieldAlert, UserCog, Users, Plus, Upload, Loader2, Database, CheckSquare, Square, ChevronLeft, ChevronRight, Trash2, Pencil } from 'lucide-react';
 import { getCurrentUnitData, Document } from '../utils/dataManager';
 import * as XLSX from 'xlsx';
 import { renderAsync } from 'docx-preview';
+import { Document as PdfDocument, Page as PdfPage, pdfjs } from 'react-pdf';
+
+// Import styles for react-pdf
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+
+// Configure PDF worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface MeetingRoomProps {
     onLeave: () => void;
@@ -12,6 +20,7 @@ interface MeetingRoomProps {
     attendees?: any[];
     onAddDocument?: (file: File) => Promise<void>;
     onAddRepoDocuments?: (docs: Document[]) => Promise<void>;
+    onUpdateDocuments?: (docs: any[]) => Promise<void>;
 }
 
 type UserRole = 'Admin' | 'Member';
@@ -63,6 +72,28 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
     const [error, setError] = useState<string | null>(null);
     const docxContainerRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
+    
+    // PDF State
+    const [numPages, setNumPages] = useState<number | null>(null);
+    const [pageNumber, setPageNumber] = useState(1);
+
+    const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+        setNumPages(numPages);
+        setLoading(false);
+    };
+
+    const changePage = (offset: number) => {
+        setPageNumber(prevPageNumber => prevPageNumber + offset);
+    };
+
+    const previousPage = () => changePage(-1);
+    const nextPage = () => changePage(1);
+
+    useEffect(() => {
+        setPageNumber(1);
+        setScale(1);
+        setNumPages(null);
+    }, [doc.id]);
 
     useEffect(() => {
         const loadContent = async () => {
@@ -74,8 +105,11 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
             try {
                 if (doc.type === 'docx') {
                     const response = await fetch(doc.url!);
+                    if (!response.ok) throw new Error(`Failed to fetch document: ${response.statusText}`);
                     const blob = await response.blob();
                     if (docxContainerRef.current) {
+                        // Clear previous content
+                        docxContainerRef.current.innerHTML = '';
                         await renderAsync(blob, docxContainerRef.current, null, {
                             className: 'docx',
                             inWrapper: true,
@@ -89,6 +123,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                             debug: false,
                         });
                     }
+                    setLoading(false);
                 } else if (doc.type === 'xlsx' || doc.type === 'xls') {
                     const response = await fetch(doc.url!);
                     const arrayBuffer = await response.arrayBuffer();
@@ -167,7 +202,34 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                 
                 {/* Viewer Toolbar */}
                 <div className="flex items-center gap-1 bg-slate-700/50 p-1 rounded-lg border border-white/5">
-                    {!isPdf && (
+                    {isPdf ? (
+                        <>
+                            <button 
+                                disabled={pageNumber <= 1} 
+                                onClick={previousPage} 
+                                className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors disabled:opacity-50"
+                                title="Trang trước"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span className="text-xs font-mono text-slate-300 px-2 text-center">
+                                {pageNumber} / {numPages || '--'}
+                            </span>
+                            <button 
+                                disabled={numPages !== null && pageNumber >= numPages} 
+                                onClick={nextPage} 
+                                className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors disabled:opacity-50"
+                                title="Trang sau"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                            <div className="w-px h-4 bg-white/10 mx-1"></div>
+                            <button onClick={handleZoomOut} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Thu nhỏ"><ZoomOut size={16} /></button>
+                            <span className="text-xs font-mono text-slate-300 w-12 text-center">{Math.round(scale * 100)}%</span>
+                            <button onClick={handleZoomIn} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Phóng to"><ZoomIn size={16} /></button>
+                            <div className="w-px h-4 bg-white/10 mx-1"></div>
+                        </>
+                    ) : (
                         <>
                             <button onClick={handleZoomOut} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded transition-colors" title="Thu nhỏ"><ZoomOut size={16} /></button>
                             <span className="text-xs font-mono text-slate-300 w-12 text-center">{Math.round(scale * 100)}%</span>
@@ -187,11 +249,35 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
             {/* Viewer Body */}
             <div className="flex-1 bg-[#525659] overflow-hidden flex justify-center relative">
                 {isPdf && hasUrl ? (
-                    <iframe 
-                        src={doc.url} 
-                        className="w-full h-full border-none" 
-                        title="PDF Viewer"
-                    />
+                    <div className="w-full h-full overflow-auto flex justify-center p-8 custom-scrollbar">
+                        <div className="shadow-2xl">
+                            <PdfDocument
+                                file={doc.url}
+                                onLoadSuccess={onDocumentLoadSuccess}
+                                onLoadError={(error) => setError(`Lỗi tải PDF: ${error.message}`)}
+                                loading={
+                                    <div className="flex flex-col items-center justify-center p-10 text-white">
+                                        <Loader2 className="animate-spin mb-2" size={32} />
+                                        <span>Đang tải tài liệu...</span>
+                                    </div>
+                                }
+                                error={
+                                    <div className="flex flex-col items-center justify-center p-10 text-red-400">
+                                        <ShieldAlert className="mb-2" size={32} />
+                                        <span>Không thể tải tài liệu này.</span>
+                                    </div>
+                                }
+                            >
+                                <PdfPage 
+                                    pageNumber={pageNumber} 
+                                    scale={scale} 
+                                    renderTextLayer={true} 
+                                    renderAnnotationLayer={true}
+                                    className="bg-white"
+                                />
+                            </PdfDocument>
+                        </div>
+                    </div>
                 ) : doc.type === 'docx' && hasUrl ? (
                     <div className="w-full h-full overflow-auto relative custom-scrollbar bg-[#525659] p-8">
                         {loading && (
@@ -312,7 +398,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
     );
 };
 
-const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetingCode, documents = [], attendees = [], onAddDocument, onAddRepoDocuments }) => {
+const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetingCode, documents = [], attendees = [], onAddDocument, onAddRepoDocuments, onUpdateDocuments }) => {
     const [micOn, setMicOn] = useState(true);
     const [cameraOn, setCameraOn] = useState(true);
     const [viewingDoc, setViewingDoc] = useState<DocItem | null>(null);
@@ -335,8 +421,9 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
     // Documents state with Permissions
     const [docs, setDocs] = useState<DocItem[]>(() => {
         if (documents && documents.length > 0) {
+            const maxId = Math.max(0, ...documents.map(d => typeof d.id === 'number' ? d.id : 0));
             return documents.map((doc, index) => ({
-                id: doc.id || index + 1,
+                id: doc.id || (maxId + index + 1),
                 name: doc.name,
                 size: doc.size || 'Unknown',
                 type: doc.type || 'file',
@@ -352,8 +439,9 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
     // Update docs when prop changes
     useEffect(() => {
         if (documents && documents.length > 0) {
+            const maxId = Math.max(0, ...documents.map(d => typeof d.id === 'number' ? d.id : 0));
             setDocs(documents.map((doc, index) => ({
-                id: doc.id || index + 1,
+                id: doc.id || (maxId + index + 1),
                 name: doc.name,
                 size: doc.size || 'Unknown',
                 type: doc.type || 'file',
@@ -521,19 +609,55 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
         setCurrentUserRole(prev => prev === 'Admin' ? 'Member' : 'Admin');
     };
 
-    const toggleDocPermission = (docId: number) => {
+    const toggleDocPermission = async (docId: number) => {
         if (currentUserRole !== 'Admin') return;
         
-        setDocs(prevDocs => prevDocs.map(doc => {
+        const updatedDocs = docs.map(doc => {
             if (doc.id === docId) {
                 const isRestricted = !doc.allowedRoles.includes('Member');
                 return {
                     ...doc,
-                    allowedRoles: isRestricted ? ['Admin', 'Member'] : ['Admin']
+                    allowedRoles: (isRestricted ? ['Admin', 'Member'] : ['Admin']) as UserRole[]
                 };
             }
             return doc;
-        }));
+        });
+
+        setDocs(updatedDocs);
+        if (onUpdateDocuments) {
+            await onUpdateDocuments(updatedDocs);
+        }
+    };
+
+    const handleDeleteDoc = async (docId: number, docName: string) => {
+        if (currentUserRole !== 'Admin') return;
+        if (!window.confirm(`Bạn có chắc chắn muốn xóa tài liệu "${docName}" không?`)) return;
+
+        const updatedDocs = docs.filter(doc => doc.id !== docId);
+        setDocs(updatedDocs);
+        if (viewingDoc?.id === docId) setViewingDoc(null);
+        
+        if (onUpdateDocuments) {
+            await onUpdateDocuments(updatedDocs);
+        }
+    };
+
+    const handleRenameDoc = async (docId: number, currentName: string) => {
+        if (currentUserRole !== 'Admin') return;
+        const newName = window.prompt("Nhập tên mới cho tài liệu:", currentName);
+        if (!newName || newName.trim() === "" || newName === currentName) return;
+
+        const updatedDocs = docs.map(doc => {
+            if (doc.id === docId) {
+                return { ...doc, name: newName.trim() };
+            }
+            return doc;
+        });
+
+        setDocs(updatedDocs);
+        if (onUpdateDocuments) {
+            await onUpdateDocuments(updatedDocs);
+        }
     };
 
     const handleDocClick = (doc: DocItem) => {
@@ -671,213 +795,229 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                         </button>
                     </div>
 
+                    {/* Document Viewer Overlay (Inside Main Column) */}
+                    {viewingDoc && (
+                        <div className="absolute inset-0 z-50 bg-slate-900 flex flex-col">
+                            <DocumentViewer doc={viewingDoc} onClose={() => setViewingDoc(null)} />
+                        </div>
+                    )}
                 </div>
 
                 {/* Right Sidebar */}
                 <div className="w-80 bg-[#16181d] border-l border-white/5 flex flex-col shrink-0 z-20 shadow-2xl">
-                     {/* Sidebar Tabs */}
-                     <div className="h-14 flex items-center shrink-0 bg-[#1a1c23] border-b border-white/5">
-                        <button 
-                            onClick={() => setActiveTab('documents')}
-                            className={`flex-1 h-full flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 ${activeTab === 'documents' ? 'text-teal-500 border-teal-500 bg-white/5' : 'text-slate-400 border-transparent hover:bg-white/5'}`}
-                        >
+                     
+                     {/* Documents Section */}
+                     <div className="flex-1 flex flex-col min-h-0 border-b border-white/5">
+                        <div className="h-12 flex items-center px-4 shrink-0 bg-[#1a1c23] border-b border-white/5 gap-2 text-sm font-bold uppercase tracking-wider text-teal-500">
                             <FileText size={16} /> Tài liệu ({docs.filter(d => d.allowedRoles.includes(currentUserRole)).length})
-                        </button>
-                        <button 
-                            onClick={() => setActiveTab('participants')}
-                            className={`flex-1 h-full flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-wider transition-colors border-b-2 ${activeTab === 'participants' ? 'text-teal-500 border-teal-500 bg-white/5' : 'text-slate-400 border-transparent hover:bg-white/5'}`}
-                        >
-                            <Users size={16} /> Thành viên ({participants.length + 1})
-                        </button>
-                     </div>
+                        </div>
 
-                     <div className="flex-1 overflow-y-auto px-3 py-4 space-y-3 custom-scrollbar">
-                        {activeTab === 'documents' ? (
-                            <>
-                                {/* Add Document Section (Admin Only) */}
-                                {currentUserRole === 'Admin' && (
-                                    <div className="mb-3">
-                                        {!isAddingDoc ? (
-                                            <button
-                                                onClick={() => setIsAddingDoc(true)}
-                                                className="w-full py-2 bg-teal-600/10 hover:bg-teal-600/20 text-teal-400 hover:text-teal-300 border border-teal-500/30 border-dashed rounded-xl flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider transition-all group"
+                        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar">
+                            {/* Add Document Section (Admin Only) */}
+                            {currentUserRole === 'Admin' && (
+                                <div className="mb-2">
+                                    {!isAddingDoc ? (
+                                        <button
+                                            onClick={() => setIsAddingDoc(true)}
+                                            className="w-full py-2 bg-teal-600/10 hover:bg-teal-600/20 text-teal-400 hover:text-teal-300 border border-teal-500/30 border-dashed rounded-xl flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider transition-all group"
+                                        >
+                                            <Plus size={14} className="group-hover:scale-110 transition-transform" /> Thêm tài liệu
+                                        </button>
+                                    ) : (
+                                        <div className="p-3 bg-slate-800/50 rounded-xl border border-white/10 animate-in fade-in slide-in-from-top-2">
+                                                <div className="flex items-center justify-between mb-3">
+                                                <span className="text-xs font-bold text-slate-300">Thêm tài liệu</span>
+                                                <button onClick={() => setIsAddingDoc(false)} className="text-slate-500 hover:text-white"><X size={14}/></button>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-2 gap-2 mb-3">
+                                                    <button 
+                                                    onClick={() => setShowRepoModal(true)}
+                                                    className="flex flex-col items-center justify-center gap-2 p-3 rounded-lg bg-slate-700/50 hover:bg-blue-600/20 border border-white/5 hover:border-blue-500/50 transition-all group/repo"
+                                                    >
+                                                        <Database size={20} className="text-blue-400 group-hover/repo:text-blue-300"/>
+                                                        <span className="text-[10px] font-bold text-slate-400 group-hover/repo:text-blue-300">Kho tài liệu</span>
+                                                    </button>
+                                                    <button 
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="flex flex-col items-center justify-center gap-2 p-3 rounded-lg bg-slate-700/50 hover:bg-teal-600/20 border border-white/5 hover:border-teal-500/50 transition-all group/upload"
+                                                    >
+                                                        <Upload size={20} className="text-teal-400 group-hover/upload:text-teal-300"/>
+                                                        <span className="text-[10px] font-bold text-slate-400 group-hover/upload:text-teal-300">Tải lên</span>
+                                                    </button>
+                                                </div>
+
+                                                <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                className="hidden"
+                                                onChange={handleFileChange}
+                                                />
+                                                {isUploading && (
+                                                    <div className="flex items-center justify-center gap-2 text-teal-400 text-xs font-bold py-2">
+                                                        <Loader2 size={14} className="animate-spin" /> Đang tải lên...
+                                                    </div>
+                                                )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Documents List */}
+                            {docs.map((doc, index) => {
+                                const hasAccess = doc.allowedRoles.includes(currentUserRole);
+                                const isRestricted = !doc.allowedRoles.includes('Member');
+                                
+                                return (
+                                <div 
+                                    key={doc.id} 
+                                    onClick={() => handleDocClick(doc)}
+                                    className={`group relative rounded-xl border p-2 flex gap-3 transition-all ${
+                                        hasAccess 
+                                            ? 'cursor-pointer hover:bg-[#2b2f3a] border-white/5 hover:border-teal-500/30' 
+                                            : 'cursor-not-allowed opacity-50 bg-[#1a1c23] border-transparent'
+                                    } ${viewingDoc?.id === doc.id ? 'border-teal-500/50 bg-[#2b2f3a]' : ''}`}
+                                >
+                                    {/* Sort Controls (Inside - Only if Access) */}
+                                    {hasAccess && (
+                                        <div className="flex flex-col gap-1 justify-center opacity-0 group-hover:opacity-100 transition-opacity absolute left-1 top-1/2 -translate-y-1/2 z-30">
+                                            <button 
+                                                onClick={(e) => {e.stopPropagation(); moveUp(index)}} 
+                                                disabled={index===0} 
+                                                className="p-0.5 hover:bg-black/60 rounded text-slate-400 hover:text-white disabled:opacity-20 transition-colors bg-black/20"
                                             >
-                                                <Plus size={14} className="group-hover:scale-110 transition-transform" /> Thêm tài liệu
+                                                <ChevronUp size={10}/>
                                             </button>
-                                        ) : (
-                                            <div className="p-3 bg-slate-800/50 rounded-xl border border-white/10 animate-in fade-in slide-in-from-top-2">
-                                                 <div className="flex items-center justify-between mb-3">
-                                                    <span className="text-xs font-bold text-slate-300">Thêm tài liệu</span>
-                                                    <button onClick={() => setIsAddingDoc(false)} className="text-slate-500 hover:text-white"><X size={14}/></button>
-                                                 </div>
-                                                 
-                                                 <div className="grid grid-cols-2 gap-2 mb-3">
-                                                     <button 
-                                                        onClick={() => setShowRepoModal(true)}
-                                                        className="flex flex-col items-center justify-center gap-2 p-3 rounded-lg bg-slate-700/50 hover:bg-blue-600/20 border border-white/5 hover:border-blue-500/50 transition-all group/repo"
-                                                     >
-                                                         <Database size={20} className="text-blue-400 group-hover/repo:text-blue-300"/>
-                                                         <span className="text-[10px] font-bold text-slate-400 group-hover/repo:text-blue-300">Kho tài liệu</span>
-                                                     </button>
-                                                     <button 
-                                                        onClick={() => fileInputRef.current?.click()}
-                                                        className="flex flex-col items-center justify-center gap-2 p-3 rounded-lg bg-slate-700/50 hover:bg-teal-600/20 border border-white/5 hover:border-teal-500/50 transition-all group/upload"
-                                                     >
-                                                         <Upload size={20} className="text-teal-400 group-hover/upload:text-teal-300"/>
-                                                         <span className="text-[10px] font-bold text-slate-400 group-hover/upload:text-teal-300">Tải lên</span>
-                                                     </button>
-                                                 </div>
+                                            <button 
+                                                onClick={(e) => {e.stopPropagation(); moveDown(index)}} 
+                                                disabled={index===docs.length-1} 
+                                                className="p-0.5 hover:bg-black/60 rounded text-slate-400 hover:text-white disabled:opacity-20 transition-colors bg-black/20"
+                                            >
+                                                <ChevronDown size={10}/>
+                                            </button>
+                                        </div>
+                                    )}
 
-                                                 <input
-                                                    type="file"
-                                                    ref={fileInputRef}
-                                                    className="hidden"
-                                                    onChange={handleFileChange}
-                                                 />
-                                                 {isUploading && (
-                                                     <div className="flex items-center justify-center gap-2 text-teal-400 text-xs font-bold py-2">
-                                                         <Loader2 size={14} className="animate-spin" /> Đang tải lên...
-                                                     </div>
-                                                 )}
-                                            </div>
-                                        )}
+                                    {/* Icon */}
+                                    <div className={`h-9 w-9 rounded-lg bg-slate-900/50 flex items-center justify-center shadow-inner shrink-0 relative ${hasAccess ? 'ml-4' : ''}`}>
+                                        {hasAccess ? getFileIcon(doc.type) : <Lock className="text-slate-500" size={16} />}
                                     </div>
-                                )}
 
-                                {/* Documents List */}
-                                {docs.map((doc, index) => {
-                                 const hasAccess = doc.allowedRoles.includes(currentUserRole);
-                                 const isRestricted = !doc.allowedRoles.includes('Member');
-                                 
-                                 return (
-                                    <div 
-                                        key={doc.id} 
-                                        onClick={() => handleDocClick(doc)}
-                                        className={`group relative rounded-xl border p-3 flex gap-3 transition-all ${
-                                            hasAccess 
-                                                ? 'cursor-pointer hover:bg-[#2b2f3a] border-white/5 hover:border-teal-500/30' 
-                                                : 'cursor-not-allowed opacity-50 bg-[#1a1c23] border-transparent'
-                                        } ${viewingDoc?.id === doc.id ? 'border-teal-500/50 bg-[#2b2f3a]' : ''}`}
-                                    >
-                                        {/* Sort Controls (Inside - Only if Access) */}
-                                        {hasAccess && (
-                                            <div className="flex flex-col gap-1 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button 
-                                                    onClick={(e) => {e.stopPropagation(); moveUp(index)}} 
-                                                    disabled={index===0} 
-                                                    className="p-1 hover:bg-black/40 rounded text-slate-400 hover:text-white disabled:opacity-20 transition-colors"
-                                                >
-                                                    <ChevronUp size={12}/>
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => {e.stopPropagation(); moveDown(index)}} 
-                                                    disabled={index===docs.length-1} 
-                                                    className="p-1 hover:bg-black/40 rounded text-slate-400 hover:text-white disabled:opacity-20 transition-colors"
-                                                >
-                                                    <ChevronDown size={12}/>
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {/* Icon */}
-                                        <div className="h-10 w-10 rounded-lg bg-slate-900/50 flex items-center justify-center shadow-inner shrink-0 relative">
-                                            {hasAccess ? getFileIcon(doc.type) : <Lock className="text-slate-500" size={20} />}
+                                    {/* Info */}
+                                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                        <div className={`text-xs font-bold leading-tight line-clamp-2 mb-0.5 transition-colors ${viewingDoc?.id === doc.id ? 'text-teal-400' : 'text-slate-300 group-hover:text-white'}`} title={doc.name}>{doc.name}</div>
+                                        <div className="flex items-center gap-2 text-[9px] text-slate-500 font-mono">
+                                            <span>{doc.size}</span>
+                                            {isRestricted && <span className="flex items-center gap-1 text-red-400"><ShieldAlert size={8} /> Admin</span>}
                                         </div>
+                                    </div>
 
-                                        {/* Info */}
-                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                            <div className={`text-xs font-bold leading-tight line-clamp-2 mb-1 transition-colors ${viewingDoc?.id === doc.id ? 'text-teal-400' : 'text-slate-300 group-hover:text-white'}`} title={doc.name}>{doc.name}</div>
-                                            <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
-                                                <span>{doc.size}</span>
-                                                {isRestricted && <span className="flex items-center gap-1 text-red-400"><ShieldAlert size={10} /> Admin</span>}
-                                            </div>
-                                        </div>
-
-                                        {/* Permission Toggle (Admin Only) */}
+                                    {/* Document Actions */}
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20 bg-[#2b2f3a] pl-2 shadow-[-10px_0_10px_#2b2f3a]">
+                                        {/* Admin Actions */}
                                         {currentUserRole === 'Admin' && (
-                                            <div className="absolute right-2 top-2 bottom-2 flex flex-col justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                            <>
                                                 <button 
                                                     onClick={(e) => {e.stopPropagation(); toggleDocPermission(doc.id)}}
                                                     className={`p-1.5 rounded-lg shadow-lg transition-all ${isRestricted ? 'bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white' : 'bg-slate-700 text-slate-400 hover:bg-teal-500 hover:text-white'}`}
-                                                    title={isRestricted ? "Unlock for Members" : "Lock for Members"}
+                                                    title={isRestricted ? "Mở khóa cho thành viên" : "Khóa cho thành viên"}
                                                 >
-                                                    {isRestricted ? <Lock size={14} /> : <Unlock size={14} />}
+                                                    {isRestricted ? <Lock size={12} /> : <Unlock size={12} />}
                                                 </button>
                                                 
                                                 <button 
-                                                    onClick={(e) => {e.stopPropagation(); alert(`Đang tải xuống: ${doc.name}`)}}
-                                                    className="p-1.5 bg-slate-700 hover:bg-teal-500 rounded-lg text-slate-300 hover:text-white shadow-lg transition-all" 
-                                                    title="Tải về"
+                                                    onClick={(e) => {e.stopPropagation(); handleRenameDoc(doc.id, doc.name)}}
+                                                    className="p-1.5 bg-slate-700 hover:bg-blue-500 rounded-lg text-slate-300 hover:text-white shadow-lg transition-all" 
+                                                    title="Đổi tên"
                                                 >
-                                                    <Download size={14} />
+                                                    <Pencil size={12} />
                                                 </button>
-                                            </div>
+
+                                                <button 
+                                                    onClick={(e) => {e.stopPropagation(); handleDeleteDoc(doc.id, doc.name)}}
+                                                    className="p-1.5 bg-slate-700 hover:bg-red-500 rounded-lg text-slate-300 hover:text-white shadow-lg transition-all" 
+                                                    title="Xóa tài liệu"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {/* Download Action (For everyone with access) */}
+                                        {hasAccess && (
+                                            <a 
+                                                href={doc.url} 
+                                                download={doc.name}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="p-1.5 bg-slate-700 hover:bg-teal-500 rounded-lg text-slate-300 hover:text-white shadow-lg transition-all flex items-center justify-center" 
+                                                title="Tải về"
+                                            >
+                                                <Download size={12} />
+                                            </a>
                                         )}
                                     </div>
-                                 );
-                            })
-                        }
-                        </>
-                        ) : (
-                            // Participants List
-                            <div className="space-y-3">
-                                {/* Current User */}
-                                <div className="flex items-center gap-3 p-3 rounded-xl bg-[#2b2f3a] border border-teal-500/30">
-                                    <div className="h-10 w-10 rounded-full bg-teal-600 flex items-center justify-center text-white font-bold shadow-lg">
-                                        T
+                                </div>
+                                );
+                            })}
+                        </div>
+                     </div>
+
+                     {/* Participants Section */}
+                     <div className="h-1/3 flex flex-col min-h-[180px] bg-[#1a1c23]/50 border-t border-white/5">
+                        <div className="h-10 flex items-center px-4 shrink-0 bg-[#1a1c23] border-b border-white/5 gap-2 text-sm font-bold uppercase tracking-wider text-slate-400">
+                            <Users size={16} /> Thành viên ({participants.length + 1})
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar">
+                            {/* Current User */}
+                            <div className="flex items-center gap-3 p-2 rounded-xl bg-[#2b2f3a] border border-teal-500/30">
+                                <div className="h-8 w-8 rounded-full bg-teal-600 flex items-center justify-center text-white font-bold shadow-lg text-xs">
+                                    T
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-bold text-white flex items-center gap-2">
+                                        Bạn
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{currentUserRole}</span>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-bold text-white flex items-center gap-2">
-                                            Bạn
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{currentUserRole}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            {micOn ? <div className="flex items-center gap-1 text-[10px] text-green-400"><div className="h-1.5 w-1.5 rounded-full bg-green-500"></div> Đang nói</div> : <div className="flex items-center gap-1 text-[10px] text-red-400"><MicOff size={10} /> Đã tắt mic</div>}
-                                        </div>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        {micOn ? <div className="flex items-center gap-1 text-[9px] text-green-400"><div className="h-1.5 w-1.5 rounded-full bg-green-500"></div> Đang nói</div> : <div className="flex items-center gap-1 text-[9px] text-red-400"><MicOff size={10} /> Đã tắt mic</div>}
                                     </div>
                                 </div>
-
-                                {/* Other Participants */}
-                                {participants.map(p => (
-                                    <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl border border-white/5 hover:bg-[#2b2f3a] transition-colors group">
-                                        <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-bold shadow-lg ${p.color}`}>
-                                            {p.initial}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-sm font-bold text-slate-200 group-hover:text-white flex items-center gap-2">
-                                                {p.name}
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{p.role}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                {p.isMuted ? (
-                                                    <div className="flex items-center gap-1 text-[10px] text-red-400"><MicOff size={10} /> Đã tắt mic</div>
-                                                ) : p.isSpeaking ? (
-                                                    <div className="flex items-center gap-1 text-[10px] text-green-400"><div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></div> Đang nói</div>
-                                                ) : (
-                                                    <div className="flex items-center gap-1 text-[10px] text-slate-500">Đang im lặng</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <button className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all">
-                                            <MoreVertical size={16} />
-                                        </button>
-                                    </div>
-                                ))}
                             </div>
-                        )}
+
+                            {/* Other Participants */}
+                            {participants.map(p => (
+                                <div key={p.id} className="flex items-center gap-3 p-2 rounded-xl border border-white/5 hover:bg-[#2b2f3a] transition-colors group">
+                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white font-bold shadow-lg text-xs ${p.color}`}>
+                                        {p.initial}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-bold text-slate-200 group-hover:text-white flex items-center gap-2">
+                                            {p.name}
+                                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{p.role}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            {p.isMuted ? (
+                                                <div className="flex items-center gap-1 text-[9px] text-red-400"><MicOff size={10} /> Đã tắt mic</div>
+                                            ) : p.isSpeaking ? (
+                                                <div className="flex items-center gap-1 text-[9px] text-green-400"><div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></div> Đang nói</div>
+                                            ) : (
+                                                <div className="flex items-center gap-1 text-[9px] text-slate-500">Đang im lặng</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all">
+                                        <MoreVertical size={16} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                      </div>
                 </div>
 
             </div>
 
-            {/* Document Viewer Modal */}
-            {viewingDoc && (
-                <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="w-full h-full max-w-6xl max-h-[90vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col">
-                         <DocumentViewer doc={viewingDoc} onClose={() => setViewingDoc(null)} />
-                    </div>
-                </div>
-            )}
+
 
             {/* Repo Modal */}
             {showRepoModal && (

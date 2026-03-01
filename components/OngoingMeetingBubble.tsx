@@ -93,72 +93,83 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
         // Load available docs
         setAvailableDocs(data.documents || []);
         
-        // Filter for "today" - for demo purposes, we'll use the current date's day
-        // If no meetings for today, we might want to show all or a specific set.
-        // For this implementation, let's show ALL meetings to ensure visibility, 
-        // but sort them to show today's or upcoming ones first.
-        // Or better: filter by day matching today if possible.
+        // Filter for "today" and "tomorrow"
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
         
-        const todayDate = new Date().getDate();
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const dayAfterTomorrow = new Date(tomorrow);
+        dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
         
         // Map Booking to DailyMeeting
-        const mappedMeetings: DailyMeeting[] = (data.bookings || []).map(booking => {
-            const room = roomsMap.get(booking.roomId);
-            
-            // Determine status based on time (mock logic)
-            // In a real app, compare booking.startTime/endTime with current time
-            let status: MeetingStatus = 'upcoming';
-            const now = new Date();
-            const [startH, startM] = booking.startTime.split(':').map(Number);
-            const [endH, endM] = booking.endTime.split(':').map(Number);
-            
-            // Simple check: if day matches today
-            if (booking.day === todayDate) {
-                const startTime = new Date(currentYear, currentMonth, todayDate, startH, startM, 0);
-                const endTime = new Date(currentYear, currentMonth, todayDate, endH, endM, 0);
+        const mappedMeetings: DailyMeeting[] = (data.bookings || [])
+            .filter(booking => {
+                // Assuming booking.day is the day of the month. 
+                // This logic is a bit fragile if bookings span months, but based on existing code:
+                // We need to construct a date object to compare properly.
+                // Ideally booking should have a full date string.
+                // Given the context, let's assume booking.day is in the current month/year context 
+                // or we should try to parse a full date if available.
+                // Looking at dataManager, booking has 'day', 'startTime', 'endTime'.
+                
+                // Let's construct the meeting date.
+                const meetingDate = new Date(currentYear, currentMonth, booking.day);
+                
+                // Check if meetingDate is today or tomorrow
+                return meetingDate.getTime() >= today.getTime() && meetingDate.getTime() < dayAfterTomorrow.getTime();
+            })
+            .map(booking => {
+                const room = roomsMap.get(booking.roomId);
+                
+                // Determine status based on time
+                let status: MeetingStatus = 'upcoming';
+                const now = new Date();
+                const [startH, startM] = booking.startTime.split(':').map(Number);
+                const [endH, endM] = booking.endTime.split(':').map(Number);
+                
+                const meetingDate = new Date(currentYear, currentMonth, booking.day);
+                const startTime = new Date(meetingDate);
+                startTime.setHours(startH, startM, 0);
+                
+                const endTime = new Date(meetingDate);
+                endTime.setHours(endH, endM, 0);
                 
                 if (now >= startTime && now <= endTime) {
                     status = 'ongoing';
                 } else if (now > endTime) {
                     status = 'finished';
                 }
-            } else if (booking.day < todayDate) {
-                status = 'finished';
-            }
-            
-            // Override for demo: Make one specific meeting 'ongoing' if needed, or rely on real time.
-            // Force the first meeting to be ongoing for demo purposes if no meeting is ongoing
-            if (status !== 'ongoing' && booking.id === (data.bookings?.[0]?.id || 0)) {
-                 status = 'ongoing';
-            }
-            
-            return {
-                id: booking.id,
-                title: booking.title,
-                timeStart: booking.startTime,
-                timeEnd: booking.endTime,
-                code: `MEET-${booking.id}`,
-                location: room ? room.name : 'Unknown',
-                status: status,
-                host: booking.attendees[0]?.name || 'Unknown',
-                attendees: (booking.attendees || []).map(u => ({
-                    id: u.id,
-                    name: u.name,
-                    role: u.role,
-                    status: u.status === 'active' ? 'online' : 'offline'
-                })),
-                documents: booking.documents.map((d: any, idx: number) => ({
-                    id: idx,
-                    name: d.name,
-                    type: d.type || 'file',
-                    size: d.size || 'Unknown',
-                    url: d.url || '',
-                    fromRepo: d.fromRepo || false
-                }))
-            };
-        });
+                
+                return {
+                    id: booking.id,
+                    title: booking.title,
+                    timeStart: booking.startTime,
+                    timeEnd: booking.endTime,
+                    code: `MEET-${booking.id}`,
+                    location: room ? room.name : 'Unknown',
+                    status: status,
+                    host: booking.attendees[0]?.name || 'Unknown',
+                    attendees: (booking.attendees || []).map(u => ({
+                        id: u.id,
+                        name: u.name,
+                        role: u.role,
+                        status: u.status === 'active' ? 'online' : 'offline'
+                    })),
+                    documents: booking.documents.map((d: any, idx: number) => ({
+                        id: idx,
+                        name: d.name,
+                        type: d.type || 'file',
+                        size: d.size || 'Unknown',
+                        url: d.url || '',
+                        fromRepo: d.fromRepo || false
+                    }))
+                };
+            });
 
         // Sort: Ongoing -> Upcoming -> Finished
         mappedMeetings.sort((a, b) => {
@@ -493,7 +504,7 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
                                     <span className="flex items-center gap-1.5"><MapPin size={12} className="text-blue-500" /> {meeting.location}</span>
                                     <span className="flex items-center gap-1.5"><Users size={12} className="text-teal-500" /> {meeting.attendees.length} đại biểu</span>
                                 </div>
-                                {meeting.status === 'ongoing' && (
+                                {((meeting.status === 'ongoing') || isAdmin) && (
                                     <button 
                                         onClick={(e) => { 
                                             e.stopPropagation(); 
@@ -501,16 +512,22 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
                                                 onJoinMeeting({
                                                     id: meeting.id,
                                                     title: meeting.title,
-                                                    code: meeting.code
+                                                    code: meeting.code,
+                                                    documents: meeting.documents,
+                                                    attendees: meeting.attendees
                                                 });
                                             } else {
                                                 setSelectedMeeting(meeting);
                                                 setViewState('room');
                                             }
                                         }}
-                                        className="mt-4 w-full py-2 bg-gradient-to-r from-teal-600 to-teal-500 text-white text-xs font-black rounded-xl hover:brightness-110 transition-all flex items-center justify-center gap-2 shadow-lg shadow-teal-500/20"
+                                        className={`mt-4 w-full py-2 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${
+                                            meeting.status === 'ongoing' 
+                                            ? 'bg-gradient-to-r from-teal-600 to-teal-500 text-white hover:brightness-110 shadow-teal-500/20' 
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 shadow-slate-200/50'
+                                        }`}
                                     >
-                                        <Video size={14} /> THAM GIA PHIÊN HỌP
+                                        <Video size={14} /> {meeting.status === 'ongoing' ? 'THAM GIA PHIÊN HỌP' : 'QUẢN LÝ PHÒNG HỌP'}
                                     </button>
                                 )}
                             </div>

@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ScrollReveal from './ui/ScrollReveal';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Plus, X, Video, FileText, Trash2, UserPlus, Paperclip, Search, Check, Upload, Pencil, AlertCircle, FolderOpen } from 'lucide-react';
-import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User, Document } from '../utils/dataManager';
+import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User, Document, syncBookingsFromSupabase, getCurrentUnitId } from '../utils/dataManager';
+import { supabase } from '../utils/supabaseClient';
 
 // --- Types & Interfaces ---
 interface MeetingDoc {
     name: string;
     size: string;
     type: string;
+    url?: string;
+    fromRepo?: boolean;
 }
 
 // Renamed to CalendarEvent to avoid collision with global DOM Event
@@ -35,10 +38,13 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [availableDocs, setAvailableDocs] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Create/Edit Form State
   const [showForm, setShowForm] = useState(false);
   const [showDocModal, setShowDocModal] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
   const [formData, setFormData] = useState<{
       id?: number; // Optional ID for existing events
       day: number;
@@ -56,13 +62,42 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => {
-      loadData();
+      const unitId = getCurrentUnitId();
+      
+      const initLoad = async () => {
+          setIsLoading(true);
+          await syncBookingsFromSupabase(unitId);
+          loadData();
+          setIsLoading(false);
+      };
+      
+      initLoad();
+
+      // Realtime subscription for timely synchronization
+      const channel = supabase
+          .channel('bookings_changes')
+          .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table: 'bookings', filter: `unit_id=eq.${unitId}` },
+              async () => {
+                  await syncBookingsFromSupabase(unitId);
+                  loadData();
+              }
+          )
+          .subscribe();
       
       // Listen for unit changes or other updates if needed
-      const handleDataChange = () => loadData();
+      const handleDataChange = async () => {
+          setIsLoading(true);
+          const currentUnitId = getCurrentUnitId();
+          await syncBookingsFromSupabase(currentUnitId);
+          loadData();
+          setIsLoading(false);
+      };
       window.addEventListener('unit-change', handleDataChange);
       window.addEventListener('data-change', handleDataChange);
       return () => {
+          supabase.removeChannel(channel);
           window.removeEventListener('unit-change', handleDataChange);
           window.removeEventListener('data-change', handleDataChange);
       };
@@ -199,7 +234,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
           endTime: "10:30",
           roomId: rooms[0]?.id || "",
           type: "internal",
-          attendees: [availableUsers[0]], // Default host
+          attendees: availableUsers.length > 0 ? [availableUsers[0]] : [], // Default host if available
           documents: []
       });
       setShowForm(true);
@@ -231,7 +266,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
       setShowForm(true); // Open edit modal
   };
 
-  const handleDeleteEvent = (event: CalendarEvent) => {
+  const handleDeleteEvent = async (event: CalendarEvent) => {
       // Only Admin can delete
       const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
       if (!storedUser) return;
@@ -242,45 +277,122 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
       }
 
       if (window.confirm(`Bạn có chắc chắn muốn xóa cuộc họp "${event.title}"?`)) {
-          const data = getCurrentUnitData();
-          const newBookings = (data.bookings || []).filter(b => b.id !== event.id);
-          saveCurrentUnitBookings(newBookings);
-          loadData(); // Refresh UI
-          setSelectedEvent(null);
+          setIsLoading(true);
+          try {
+              // Delete from Supabase
+              const { error } = await supabase
+                  .from('bookings')
+                  .delete()
+                  .eq('id', event.id);
+
+              if (error) {
+                  console.error('Error deleting booking from Supabase:', error);
+                  // Fallback to local storage if needed, but we prefer Supabase success
+              }
+
+              // Update local state optimistically or by re-syncing
+              const data = getCurrentUnitData();
+              const newBookings = (data.bookings || []).filter(b => b.id !== event.id);
+              saveCurrentUnitBookings(newBookings);
+              
+              // Re-sync to be sure
+              await syncBookingsFromSupabase(getCurrentUnitId());
+              loadData(); // Refresh UI
+              setSelectedEvent(null);
+          } catch (err) {
+              console.error('Failed to delete event:', err);
+          } finally {
+              setIsLoading(false);
+          }
       }
   };
 
-  const handleSaveEvent = () => {
-      if (!formData || !formData.title.trim()) return;
-
-      const data = getCurrentUnitData();
-      let currentBookings = data.bookings || [];
-
-      const newBooking: Booking = {
-          id: formData.id || Date.now(),
-          day: formData.day,
-          title: formData.title,
-          startTime: formData.startTime,
-          endTime: formData.endTime,
-          roomId: formData.roomId,
-          type: formData.type,
-          attendees: formData.attendees,
-          documents: formData.documents
-      };
-
-      if (formData.id) {
-          // Update existing
-          currentBookings = currentBookings.map(b => b.id === formData.id ? newBooking : b);
-      } else {
-          // Add new
-          currentBookings.push(newBooking);
+  const handleSaveEvent = async () => {
+      if (!formData || !formData.title.trim() || !formData.roomId) {
+          if (formData && !formData.roomId) alert("Vui lòng chọn phòng họp.");
+          return;
       }
 
-      saveCurrentUnitBookings(currentBookings);
-      loadData(); // Refresh UI
+      setIsLoading(true);
+      try {
+          const unitId = getCurrentUnitId();
+          // Use a smaller ID if it's a new booking to avoid integer overflow in some DB configurations
+          // though bigint is recommended.
+          const bookingId = formData.id || Math.floor(Date.now() / 1000) + Math.floor(Math.random() * 1000);
+          
+          const bookingData = {
+              id: bookingId,
+              unit_id: unitId,
+              day: formData.day,
+              title: formData.title,
+              start_time: formData.startTime,
+              end_time: formData.endTime,
+              room_id: formData.roomId,
+              type: formData.type,
+              attendees: formData.attendees || [],
+              documents: formData.documents || []
+          };
 
-      setShowForm(false);
-      setFormData(null);
+          let error;
+          if (formData.id) {
+              // Update existing
+              const { error: updateError } = await supabase
+                  .from('bookings')
+                  .update(bookingData)
+                  .eq('id', formData.id);
+              error = updateError;
+          } else {
+              // Add new
+              const { error: insertError } = await supabase
+                  .from('bookings')
+                  .insert([bookingData]);
+              error = insertError;
+          }
+
+          if (error) {
+              console.error('Error saving booking to Supabase:', error);
+              alert(`Không thể lưu cuộc họp lên hệ thống: ${error.message}. Vui lòng kiểm tra lại kết nối hoặc cấu hình bảng 'bookings'.`);
+              setIsLoading(false);
+              return;
+          }
+
+          // Update local state only if Supabase save was successful
+          const data = getCurrentUnitData();
+          let currentBookings = data.bookings || [];
+          
+          const newBooking: Booking = {
+              id: bookingId,
+              day: formData.day,
+              title: formData.title,
+              startTime: formData.startTime,
+              endTime: formData.endTime,
+              roomId: formData.roomId,
+              type: formData.type,
+              attendees: formData.attendees,
+              documents: formData.documents
+          };
+
+          if (formData.id) {
+              currentBookings = currentBookings.map(b => b.id === formData.id ? newBooking : b);
+          } else {
+              currentBookings.push(newBooking);
+          }
+
+          saveCurrentUnitBookings(currentBookings);
+          
+          // Re-sync
+          await syncBookingsFromSupabase(unitId);
+          loadData(); // Refresh UI
+
+          setShowForm(false);
+          setFormData(null);
+          setShowUserDropdown(false);
+          setUserSearchTerm('');
+      } catch (err) {
+          console.error('Failed to save event:', err);
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   const handleAddUser = (userId: number) => {
@@ -588,8 +700,8 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
             
             {/* --- Management Form Modal (Create/Edit) --- */}
             {showForm && formData && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-sm animate-in fade-in">
-                    <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-5">
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/10 animate-in fade-in">
+                    <div className="w-full max-w-2xl bg-white rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-5">
                          {/* Header */}
                          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                              <div>
@@ -676,40 +788,68 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                                          <Users size={14} /> Thành phần tham dự ({formData.attendees.length})
                                      </label>
                                      
-                                     {/* Add User Dropdown (Simulated) */}
-                                     <div className="relative group">
-                                         <button className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-md flex items-center gap-1 transition-colors">
-                                             <UserPlus size={12} /> Thêm nhân sự
+                                     {/* Add User Dropdown */}
+                                     <div className="relative">
+                                         <button 
+                                            type="button"
+                                            onClick={() => setShowUserDropdown(!showUserDropdown)}
+                                            className={`text-xs font-bold px-2 py-1 rounded-md flex items-center gap-1 transition-colors ${showUserDropdown ? 'bg-blue-600 text-white' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'}`}
+                                         >
+                                             <UserPlus size={12} /> {showUserDropdown ? 'Đóng danh sách' : 'Thêm nhân sự'}
                                          </button>
-                                         <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden hidden group-hover:block z-20 max-h-60 overflow-y-auto custom-scrollbar">
-                                             <div className="p-2 bg-slate-50 border-b border-slate-100 flex justify-between items-center sticky top-0 z-10">
-                                                 <span className="font-bold text-[10px] text-slate-400 uppercase">Gợi ý</span>
-                                                 <button 
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleAddAllUsers();
-                                                    }}
-                                                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
-                                                 >
-                                                    + Tất cả
-                                                 </button>
+                                         {showUserDropdown && (
+                                             <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-xl overflow-hidden z-20 flex flex-col max-h-72">
+                                                 <div className="p-2 bg-slate-50 border-b border-slate-100 space-y-2">
+                                                     <div className="flex justify-between items-center">
+                                                         <span className="font-bold text-[10px] text-slate-400 uppercase">Chọn nhân sự</span>
+                                                         <button 
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleAddAllUsers();
+                                                            }}
+                                                            className="text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                                                         >
+                                                            + Tất cả
+                                                         </button>
+                                                     </div>
+                                                     <div className="relative">
+                                                         <Search className="absolute left-2 top-1.5 text-slate-400" size={10} />
+                                                         <input 
+                                                            type="text"
+                                                            placeholder="Tìm tên..."
+                                                            value={userSearchTerm}
+                                                            onChange={(e) => setUserSearchTerm(e.target.value)}
+                                                            className="w-full pl-6 pr-2 py-1 text-[10px] border border-slate-200 rounded bg-white focus:outline-none focus:border-blue-500"
+                                                         />
+                                                     </div>
+                                                 </div>
+                                                 <div className="overflow-y-auto custom-scrollbar">
+                                                     {availableUsers
+                                                        .filter(user => user.name.toLowerCase().includes(userSearchTerm.toLowerCase()))
+                                                        .map(user => {
+                                                            const isSelected = formData.attendees.some(u => u.id === user.id);
+                                                            if (isSelected) return null;
+                                                            return (
+                                                                <button 
+                                                                    key={user.id}
+                                                                    type="button"
+                                                                    onClick={() => handleAddUser(user.id)}
+                                                                    className="w-full text-left px-3 py-2 hover:bg-blue-50 text-xs font-bold text-slate-700 flex items-center justify-between border-b border-slate-50 last:border-0"
+                                                                >
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className={`h-5 w-5 rounded-full ${user.avatarColor} text-white text-[8px] flex items-center justify-center`}>
+                                                                            {user.name.charAt(0)}
+                                                                        </div>
+                                                                        <span>{user.name}</span>
+                                                                    </div>
+                                                                    <span className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded">{user.dept}</span>
+                                                                </button>
+                                                            )
+                                                        })}
+                                                 </div>
                                              </div>
-                                             {availableUsers.map(user => {
-                                                 const isSelected = formData.attendees.some(u => u.id === user.id);
-                                                 if (isSelected) return null;
-                                                 return (
-                                                     <button 
-                                                        key={user.id}
-                                                        onClick={() => handleAddUser(user.id)}
-                                                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-xs font-bold text-slate-700 flex items-center justify-between"
-                                                     >
-                                                         <span>{user.name}</span>
-                                                         <span className="text-[9px] text-slate-400 bg-slate-100 px-1 rounded">{user.dept}</span>
-                                                     </button>
-                                                 )
-                                             })}
-                                         </div>
+                                         )}
                                      </div>
                                  </div>
                                  

@@ -1,15 +1,44 @@
 import React, { useEffect, useState } from 'react';
-import { getCurrentUnitData, UnitData } from '../../utils/dataManager';
-import { Users, DoorOpen, CalendarDays, Activity } from 'lucide-react';
+import { getCurrentUnitData, UnitData, syncDocumentsFromSupabase, syncUsersFromSupabase, getCurrentUnitId } from '../../utils/dataManager';
+import { Users, DoorOpen, CalendarDays, Activity, Loader2 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
     const [data, setData] = useState<UnitData | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        setData(getCurrentUnitData());
+        const loadAllData = async () => {
+            setIsLoading(true);
+            const unitId = getCurrentUnitId();
+            
+            // Sync key data from Supabase
+            await Promise.all([
+                syncDocumentsFromSupabase(unitId),
+                syncUsersFromSupabase(unitId)
+            ]);
+            
+            setData(getCurrentUnitData());
+            setIsLoading(false);
+        };
+        
+        loadAllData();
+        
+        const handleDataChange = () => setData(getCurrentUnitData());
+        window.addEventListener('data-change', handleDataChange);
+        window.addEventListener('unit-change', loadAllData);
+        
+        return () => {
+            window.removeEventListener('data-change', handleDataChange);
+            window.removeEventListener('unit-change', loadAllData);
+        };
     }, []);
 
-    if (!data) return <div>Loading...</div>;
+    if (isLoading || !data) return (
+        <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+            <Loader2 className="animate-spin mb-4" size={48} />
+            <p className="font-medium">Đang tải dữ liệu tổng quan...</p>
+        </div>
+    );
 
     const stats = [
         { title: 'Tổng số phòng', value: data.rooms.length, icon: DoorOpen, color: 'bg-blue-500' },

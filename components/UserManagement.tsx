@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ScrollReveal from './ui/ScrollReveal';
 import { Users, Shield, UserPlus, MoreHorizontal, ChevronRight, ChevronDown, Building2, Search, Filter, Briefcase, Trash2, Pencil, X, Check, Plus, ShieldCheck, Mail, Phone, RefreshCcw, CheckSquare, Square, MinusSquare } from 'lucide-react';
-import { User, getCurrentUnitData, saveCurrentUnitUsers } from '../utils/dataManager';
+import { User, getCurrentUnitData, saveCurrentUnitUsers, syncUsersFromSupabase, getCurrentUnitId } from '../utils/dataManager';
+import { supabase } from '../utils/supabaseClient';
 
 const ROLES = ["Admin", "Thư ký", "Thành viên", "Giám đốc", "Nhân viên"];
 const AVATAR_COLORS = [
@@ -130,15 +131,29 @@ const UserManagement: React.FC = () => {
 
   // Load Data on Mount
   useEffect(() => {
-      const unitData = getCurrentUnitData();
-      setUsers(unitData.users);
-      setUnitName(unitData.name);
+      const loadUsers = async () => {
+          const unitData = getCurrentUnitData();
+          setUnitName(unitData.name);
+          
+          // Show local data first
+          setUsers(unitData.users);
+          
+          // Then sync from Supabase
+          const unitId = getCurrentUnitId();
+          const syncedUsers = await syncUsersFromSupabase(unitId);
+          if (syncedUsers && syncedUsers.length > 0) {
+              setUsers(syncedUsers);
+              const depts = Array.from(new Set(syncedUsers.map(u => u.dept)));
+              setAvailableDepts(depts);
+              setSelectedDepts(new Set(depts));
+          } else {
+              const depts = Array.from(new Set(unitData.users.map(u => u.dept)));
+              setAvailableDepts(depts);
+              setSelectedDepts(new Set(depts));
+          }
+      };
       
-      // Extract unique departments
-      const depts = Array.from(new Set(unitData.users.map(u => u.dept)));
-      setAvailableDepts(depts);
-      // Select all by default
-      setSelectedDepts(new Set(depts));
+      loadUsers();
   }, []);
 
   // Filter Logic
@@ -170,28 +185,75 @@ const UserManagement: React.FC = () => {
       setShowForm(true);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
       if (window.confirm("Bạn có chắc chắn muốn xóa nhân sự này khỏi hệ thống?")) {
+          // Optimistic update
           const updatedUsers = users.filter(u => u.id !== id);
           setUsers(updatedUsers);
           saveCurrentUnitUsers(updatedUsers);
+
+          // Delete from Supabase
+          const { error } = await supabase
+              .from('users')
+              .delete()
+              .eq('id', id);
+              
+          if (error) {
+              console.error("Failed to delete user from Supabase:", error);
+              // Revert if needed, but for now just log
+          }
       }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!formData.name) return;
 
+      const unitId = getCurrentUnitId();
       let updatedUsers: User[];
+      let savedUser: User;
 
       if (isEditing) {
-          updatedUsers = users.map(u => u.id === formData.id ? { ...u, ...formData } as User : u);
+          savedUser = { ...formData } as User;
+          updatedUsers = users.map(u => u.id === formData.id ? savedUser : u);
+          
+          // Update in Supabase
+          const { error } = await supabase
+              .from('users')
+              .update({
+                  name: savedUser.name,
+                  role: savedUser.role,
+                  dept: savedUser.dept,
+                  status: savedUser.status,
+                  avatar_color: savedUser.avatarColor,
+                  email: savedUser.email
+              })
+              .eq('id', savedUser.id);
+              
+          if (error) console.error("Failed to update user in Supabase:", error);
       } else {
-          const newUser: User = {
+          savedUser = {
               ...formData,
               id: Date.now(),
+              unitId: unitId
           } as User;
-          updatedUsers = [newUser, ...users];
+          updatedUsers = [savedUser, ...users];
+          
+          // Insert to Supabase
+          const { error } = await supabase
+              .from('users')
+              .insert({
+                  id: savedUser.id,
+                  name: savedUser.name,
+                  role: savedUser.role,
+                  dept: savedUser.dept,
+                  status: savedUser.status,
+                  avatar_color: savedUser.avatarColor,
+                  email: savedUser.email,
+                  unit_id: savedUser.unitId
+              });
+              
+          if (error) console.error("Failed to insert user to Supabase:", error);
       }
 
       setUsers(updatedUsers);
