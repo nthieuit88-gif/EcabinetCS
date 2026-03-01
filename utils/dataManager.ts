@@ -52,6 +52,7 @@ export interface UnitData {
     rooms: Room[];
     bookings: Booking[];
     documents: Document[];
+    lastUpdated?: number; // Timestamp for cache invalidation
 }
 
 const UNIT_IDS = ['unit_1', 'unit_2', 'unit_3'];
@@ -173,6 +174,27 @@ const generateBookings = (unitId: string, users: User[], rooms: Room[]): Booking
 // Initialize Data if not exists
 export const initData = () => {
     if (typeof window === 'undefined') return;
+
+    // Check for cache expiration (7 days)
+    const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+    const lastCleanup = localStorage.getItem('ECABINET_LAST_CLEANUP');
+    
+    if (lastCleanup && (Date.now() - parseInt(lastCleanup) > CACHE_EXPIRY_MS)) {
+        console.log("Cache expired (7 days). Clearing local storage...");
+        UNIT_IDS.forEach(unitId => {
+            localStorage.removeItem(`ECABINET_DATA_${unitId}`);
+        });
+        localStorage.removeItem('ECABINET_CURRENT_UNIT');
+        localStorage.setItem('ECABINET_LAST_CLEANUP', Date.now().toString());
+        // Force reload to regenerate fresh data
+        window.location.reload();
+        return;
+    }
+
+    // Set initial cleanup timestamp if missing
+    if (!lastCleanup) {
+        localStorage.setItem('ECABINET_LAST_CLEANUP', Date.now().toString());
+    }
 
     // Ensure current unit is set
     if (!localStorage.getItem('ECABINET_CURRENT_UNIT')) {
