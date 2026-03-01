@@ -291,7 +291,7 @@ export const getUserById = (userId: number, unitId?: string): User | undefined =
 };
 
 // Update User Session
-export const updateUserSession = (userId: number, sessionId: string, unitId?: string) => {
+export const updateUserSession = async (userId: number, sessionId: string, unitId?: string) => {
     const targetUnitId = unitId || getCurrentUnitId();
     const key = `ECABINET_DATA_${targetUnitId}`;
     const currentData = getUnitData(targetUnitId);
@@ -306,6 +306,31 @@ export const updateUserSession = (userId: number, sessionId: string, unitId?: st
     };
     
     localStorage.setItem(key, JSON.stringify(newData));
+
+    // Update Supabase (Fire and forget or await if needed)
+    try {
+        // First check if user exists in Supabase, if not insert them
+        const user = currentData.users.find(u => u.id === userId);
+        if (user) {
+            const { error } = await supabase
+                .from('users')
+                .upsert({ 
+                    id: user.id,
+                    name: user.name,
+                    role: user.role,
+                    dept: user.dept,
+                    status: user.status,
+                    avatar_color: user.avatarColor,
+                    email: user.email,
+                    unit_id: user.unitId,
+                    current_session_id: sessionId 
+                }, { onConflict: 'id' });
+                
+            if (error) console.error("Failed to update session in Supabase:", error);
+        }
+    } catch (err) {
+        console.error("Supabase update error:", err);
+    }
 };
 
 // Save Users for Current Unit
@@ -397,7 +422,30 @@ export const syncUsersFromSupabase = async (unitId: string): Promise<User[]> => 
             const currentDataStr = localStorage.getItem(key);
             if (currentDataStr) {
                 const currentData = JSON.parse(currentDataStr);
-                currentData.users = mappedUsers;
+                
+                // Merge strategy: Update existing local users with data from Supabase (e.g. session ID)
+                // If user doesn't exist locally (e.g. new user), add them.
+                // But primarily we want to preserve local mock users and just update their session/status.
+                
+                const localUsersMap = new Map(currentData.users.map((u: User) => [u.id, u]));
+                
+                mappedUsers.forEach(remoteUser => {
+                    if (localUsersMap.has(remoteUser.id)) {
+                        // Update existing user
+                        localUsersMap.set(remoteUser.id, {
+                            ...localUsersMap.get(remoteUser.id)!,
+                            currentSessionId: remoteUser.currentSessionId,
+                            // Update other fields if needed, but be careful not to break mock data structure
+                            status: remoteUser.status
+                        });
+                    } else {
+                        // Add new user from remote
+                        localUsersMap.set(remoteUser.id, remoteUser);
+                    }
+                });
+                
+                currentData.users = Array.from(localUsersMap.values());
+                
                 localStorage.setItem(key, JSON.stringify(currentData));
                 window.dispatchEvent(new Event('data-change'));
             }

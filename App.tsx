@@ -8,7 +8,7 @@ import RoomManager from './components/admin/RoomManager';
 import BookingManager from './components/admin/BookingManager';
 import UserManager from './components/admin/UserManager';
 import DocumentManager from './components/admin/DocumentManager';
-import { initData, getCurrentUnitId, getUserById, syncDocumentsFromSupabase } from './utils/dataManager';
+import { initData, getCurrentUnitId, getUserById, syncDocumentsFromSupabase, syncUsersFromSupabase } from './utils/dataManager';
 import { testSupabaseConnection, supabase } from './utils/supabaseClient';
 
 // Protected Route Component
@@ -84,8 +84,9 @@ function App() {
     // Initial data seed
     initData();
     
-    // Sync documents from Supabase
+    // Sync documents and users from Supabase
     syncDocumentsFromSupabase(getCurrentUnitId());
+    syncUsersFromSupabase(getCurrentUnitId());
     
     // Ensure state matches current unit (in case initData changed it, though unlikely)
     const initialUnit = getCurrentUnitId();
@@ -98,16 +99,24 @@ function App() {
         const newUnitId = getCurrentUnitId();
         setCurrentUnitId(prev => (prev !== newUnitId ? newUnitId : prev));
         syncDocumentsFromSupabase(newUnitId);
+        syncUsersFromSupabase(newUnitId);
     };
 
     window.addEventListener('unit-change', handleUnitChange);
 
-    // Set up Supabase real-time subscription for documents
+    // Set up Supabase real-time subscription for documents and users
     const subscription = supabase
-      .channel('public:documents')
+      .channel('public:data')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, payload => {
-        console.log('Change received!', payload);
+        console.log('Document change received!', payload);
         syncDocumentsFromSupabase(getCurrentUnitId());
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, payload => {
+        console.log('User change received!', payload);
+        syncUsersFromSupabase(getCurrentUnitId()).then(() => {
+            // Trigger auth check after user data is updated
+            window.dispatchEvent(new Event('auth-change'));
+        });
       })
       .subscribe();
 
