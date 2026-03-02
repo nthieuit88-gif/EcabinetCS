@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ScrollReveal from './ui/ScrollReveal';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, MapPin, Users, Plus, X, Video, FileText, Trash2, UserPlus, Paperclip, Search, Check, Upload, Pencil, AlertCircle, FolderOpen, UserCog } from 'lucide-react';
-import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User, Document, syncBookingsFromSupabase, getCurrentUnitId } from '../utils/dataManager';
+import { getCurrentUnitData, saveCurrentUnitBookings, Booking, Room, User, Document, syncBookingsFromSupabase, syncDocumentsFromSupabase, getCurrentUnitId } from '../utils/dataManager';
 import { supabase } from '../utils/supabaseClient';
 
 // --- Types & Interfaces ---
@@ -39,6 +39,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [availableDocs, setAvailableDocs] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   
   // Role State (Default to Admin for easier testing/usage)
   const [currentUserRole, setCurrentUserRole] = useState<'Admin' | 'Member'>('Admin');
@@ -87,6 +88,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
       const initLoad = async () => {
           setIsLoading(true);
           await syncBookingsFromSupabase(unitId);
+          await syncDocumentsFromSupabase(unitId);
           loadData();
           setIsLoading(false);
       };
@@ -111,6 +113,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
           setIsLoading(true);
           const currentUnitId = getCurrentUnitId();
           await syncBookingsFromSupabase(currentUnitId);
+          await syncDocumentsFromSupabase(currentUnitId);
           loadData();
           setIsLoading(false);
       };
@@ -433,20 +436,52 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
       });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0] && formData) {
           const file = e.target.files[0];
-          const newDoc: MeetingDoc = {
-              name: file.name,
-              size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-              type: file.name.split('.').pop() || 'file',
-              url: URL.createObjectURL(file),
-              fromRepo: false
-          };
-          setFormData({
-              ...formData,
-              documents: [...formData.documents, newDoc]
-          });
+          setIsUploading(true);
+          
+          try {
+              const unitId = getCurrentUnitId();
+              const fileExt = file.name.split('.').pop()?.toLowerCase() || 'file';
+              const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+              const filePath = `meetings/${formData.id || 'temp'}/${fileName}`;
+
+              const { error: uploadError } = await supabase.storage
+                  .from('documents')
+                  .upload(filePath, file);
+
+              let fileUrl = '';
+              if (!uploadError) {
+                  const { data: publicUrlData } = supabase.storage
+                      .from('documents')
+                      .getPublicUrl(filePath);
+                  fileUrl = publicUrlData.publicUrl;
+              } else {
+                  console.error('Supabase upload failed:', uploadError);
+                  fileUrl = URL.createObjectURL(file); // Fallback
+              }
+
+              const newDoc: MeetingDoc = {
+                  name: file.name,
+                  size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+                  type: fileExt,
+                  url: fileUrl,
+                  fromRepo: false
+              };
+              
+              setFormData(prev => prev ? {
+                  ...prev,
+                  documents: [...prev.documents, newDoc]
+              } : null);
+          } catch (error) {
+              console.error("Error uploading file:", error);
+              alert("Lỗi tải lên tài liệu. Vui lòng thử lại.");
+          } finally {
+              setIsUploading(false);
+              // Reset input value to allow selecting the same file again
+              if (e.target) e.target.value = '';
+          }
       }
   };
 
@@ -894,12 +929,14 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                                          </button>
                                          <button 
                                             onClick={() => fileInputRef.current?.click()}
-                                            className="text-xs font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-md flex items-center gap-1 transition-colors"
+                                            disabled={isUploading}
+                                            className="text-xs font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 px-2 py-1 rounded-md flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                          >
-                                             <Upload size={12} /> Tải lên
+                                             {isUploading ? <div className="h-3 w-3 rounded-full border-2 border-teal-600 border-t-transparent animate-spin"></div> : <Upload size={12} />} 
+                                             {isUploading ? 'Đang tải...' : 'Tải lên'}
                                          </button>
                                      </div>
-                                     <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+                                     <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} disabled={isUploading} />
                                  </div>
 
                                  {/* Doc List */}
@@ -932,11 +969,24 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
 
                          {/* Footer Actions */}
                          <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                             <button onClick={() => setShowForm(false)} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors">
+                             <button 
+                                onClick={() => setShowForm(false)} 
+                                disabled={isUploading || isLoading}
+                                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                             >
                                  Hủy bỏ
                              </button>
-                             <button onClick={handleSaveEvent} className="px-5 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-bold hover:bg-teal-700 transition-colors shadow-lg shadow-teal-600/20 flex items-center gap-2">
-                                 <Check size={16} /> {formData.id ? "Cập nhật" : "Lưu cuộc họp"}
+                             <button 
+                                onClick={handleSaveEvent} 
+                                disabled={isUploading || isLoading}
+                                className="px-5 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-bold hover:bg-teal-700 transition-colors shadow-lg shadow-teal-600/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                             >
+                                 {isUploading || isLoading ? (
+                                     <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+                                 ) : (
+                                     <Check size={16} />
+                                 )}
+                                 {isUploading ? "Đang tải lên..." : isLoading ? "Đang lưu..." : (formData.id ? "Cập nhật" : "Lưu cuộc họp")}
                              </button>
                          </div>
                     </div>

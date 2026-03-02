@@ -109,7 +109,9 @@ const DocumentRepository: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-      loadDocs();
+      const unitId = getCurrentUnitId();
+      syncDocumentsFromSupabase(unitId).then(() => loadDocs());
+      
       const handleDataChange = () => loadDocs();
       window.addEventListener('unit-change', handleDataChange);
       window.addEventListener('data-change', handleDataChange);

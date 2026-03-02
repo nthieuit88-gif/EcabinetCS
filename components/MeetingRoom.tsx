@@ -70,6 +70,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
     const [content, setContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [useFallbackViewer, setUseFallbackViewer] = useState(false);
     const docxContainerRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
     
@@ -96,6 +97,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
         setScale(1);
         setNumPages(null);
         setContent(null);
+        setUseFallbackViewer(false);
     }, [doc.id]);
 
     useEffect(() => {
@@ -106,6 +108,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
             
             setLoading(true);
             setError(null);
+            setUseFallbackViewer(false);
             
             try {
                 if (doc.type === 'docx') {
@@ -132,6 +135,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                     if (isMounted) setLoading(false);
                 } else if (doc.type === 'xlsx' || doc.type === 'xls') {
                     const response = await fetch(doc.url!);
+                    if (!response.ok) throw new Error(`Failed to fetch document: ${response.statusText}`);
                     const arrayBuffer = await response.arrayBuffer();
                     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
                     
@@ -159,13 +163,17 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                     if (isMounted) setContent(`<pre class="whitespace-pre-wrap font-mono text-sm bg-white p-8 shadow-lg min-h-[800px]">${text}</pre>`);
                 }
             } catch (err) {
-                // Silently handle fetch errors (e.g., expired blob URLs or CORS issues)
-                // console.warn("Document load failed:", err);
+                console.warn("Document load failed, trying fallback:", err);
                 if (isMounted) {
                     if (doc.url?.startsWith('blob:')) {
                         setError("Tệp cục bộ đã hết hạn. Vui lòng tải lên lại tài liệu.");
                     } else {
-                        setError("Không thể tải nội dung tài liệu. Vui lòng tải xuống để xem.");
+                        // Fallback to Google Docs Viewer for supported types
+                        if (['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'].includes(doc.type)) {
+                            setUseFallbackViewer(true);
+                        } else {
+                            setError("Không thể tải nội dung tài liệu. Vui lòng tải xuống để xem.");
+                        }
                     }
                 }
             } finally {
@@ -324,7 +332,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                             </PdfDocument>
                         </div>
                     </div>
-                ) : doc.type === 'docx' && hasUrl ? (
+                ) : doc.type === 'docx' && hasUrl && !useFallbackViewer ? (
                     <div className="w-full h-full overflow-auto relative custom-scrollbar bg-[#525659] p-8">
                         {loading && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 z-10 text-slate-600">
@@ -338,7 +346,7 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                             style={{ transform: `scale(${scale})`, width: '800px' }} 
                         />
                     </div>
-                ) : (doc.type === 'doc' || doc.type === 'pptx') && hasUrl ? (
+                ) : ((doc.type === 'doc' || doc.type === 'pptx' || doc.type === 'ppt') || useFallbackViewer) && hasUrl ? (
                     isLocalFile ? (
                         <div className="flex flex-col items-center justify-center h-full text-slate-300 p-8 text-center">
                             <div className="bg-slate-700 p-6 rounded-full mb-6">
@@ -355,9 +363,9 @@ const DocumentViewer: React.FC<{ doc: DocItem; onClose: () => void }> = ({ doc, 
                         </div>
                     ) : (
                         <iframe 
-                            src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(doc.url!)}`}
+                            src={`https://docs.google.com/gview?url=${encodeURIComponent(doc.url!)}&embedded=true`}
                             className="w-full h-full border-none bg-white" 
-                            title="Office Viewer"
+                            title="Google Docs Viewer"
                         />
                     )
                 ) : (
@@ -917,7 +925,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar">
                             {/* Add Document Section (Admin Only) */}
                             {/* System Locked: Add Document Disabled */}
-                            {false && currentUserRole === 'Admin' && (
+                            {currentUserRole === 'Admin' && (
                                 <div className="mb-2">
                                     {!isAddingDoc ? (
                                         <button
@@ -1019,7 +1027,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20 bg-[#2b2f3a] pl-2 shadow-[-10px_0_10px_#2b2f3a]">
                                         {/* Admin Actions */}
                                         {/* System Locked: Admin Actions Disabled */}
-                                        {false && currentUserRole === 'Admin' && (
+                                        {currentUserRole === 'Admin' && (
                                             <>
                                                 <button 
                                                     onClick={(e) => {e.stopPropagation(); toggleDocPermission(doc.id)}}
