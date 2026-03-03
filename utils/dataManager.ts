@@ -525,6 +525,9 @@ export const syncBookingsFromSupabase = async (unitId: string): Promise<Booking[
                 id: r.id,
                 name: r.name,
                 capacity: r.capacity || 0,
+                location: r.location || '',
+                amenities: r.amenities || [],
+                status: r.status || 'active',
                 unit_id: unitId
             }));
             await supabase.from('rooms').upsert(roomsToSync, { onConflict: 'id' });

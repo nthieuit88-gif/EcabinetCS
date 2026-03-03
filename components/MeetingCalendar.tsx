@@ -370,7 +370,14 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
 
           if (error) {
               console.error('Error saving booking to Supabase:', error);
-              alert(`Không thể lưu cuộc họp lên hệ thống: ${error.message}. Vui lòng kiểm tra lại kết nối hoặc cấu hình bảng 'bookings'.`);
+              // Check for Foreign Key Violation (Room ID not found)
+              if (error.code === '23503') {
+                  alert(`Lỗi: Phòng họp không tồn tại trên hệ thống (Mã phòng: ${formData.roomId}). Vui lòng thử lại sau giây lát.`);
+                  // Trigger room sync for next time
+                  syncBookingsFromSupabase(unitId);
+              } else {
+                  alert(`Không thể lưu cuộc họp: ${error.message} (Mã lỗi: ${error.code})`);
+              }
               setIsLoading(false);
               return;
           }
@@ -409,6 +416,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
           setUserSearchTerm('');
       } catch (err) {
           console.error('Failed to save event:', err);
+          alert("Đã xảy ra lỗi không mong muốn khi lưu cuộc họp.");
       } finally {
           setIsLoading(false);
       }
