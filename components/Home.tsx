@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './Navbar';
 import Hero from './Hero';
 import SocialProof from './SocialProof';
@@ -163,6 +163,16 @@ const Home: React.FC = () => {
       }
   };
 
+  const [userRole, setUserRole] = useState<string>('Member');
+
+  useEffect(() => {
+      const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+      if (storedUser) {
+          const user = JSON.parse(storedUser);
+          setUserRole(user.role || 'Member');
+      }
+  }, []);
+
   if (activeMeeting) {
       return (
           <MeetingRoom 
@@ -191,10 +201,15 @@ const Home: React.FC = () => {
             documents: event.documents,
             attendees: event.attendees
         })} />
-        <DocumentRepository />
-        <UserManagement />
-        <Timeline />
-        <Pricing />
+        
+        {userRole === 'Admin' && (
+            <>
+                <DocumentRepository />
+                <UserManagement />
+                <Timeline />
+                <Pricing />
+            </>
+        )}
       </main>
       <Footer />
       <OngoingMeetingBubble onJoinMeeting={(meeting) => setActiveMeeting(meeting)} />

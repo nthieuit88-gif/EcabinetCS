@@ -58,8 +58,9 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
     const [repoSearch, setRepoSearch] = useState('');
     const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>([]);
     
-    // Role state for this widget (Assumed admin for this interaction)
-    const [isAdmin] = useState(true);
+    // Role state for this widget
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [currentUser, setCurrentUser] = useState<any>(null);
     const [availableUsers, setAvailableUsers] = useState<MeetingUser[]>([]);
     const [availableDocs, setAvailableDocs] = useState<Document[]>([]);
 
@@ -67,6 +68,13 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
 
     // Load data
     useEffect(() => {
+        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+        if (storedUser) {
+            const user = JSON.parse(storedUser);
+            setCurrentUser(user);
+            setIsAdmin(user.role === 'Admin');
+        }
+
         loadMeetings();
         
         const handleDataChange = () => loadMeetings();
@@ -213,13 +221,20 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
 
     const handleJoinRoom = () => {
         if (onJoinMeeting && selectedMeeting) {
-            onJoinMeeting({
-                id: selectedMeeting.id,
-                title: selectedMeeting.title,
-                code: selectedMeeting.code,
-                documents: selectedMeeting.documents,
-                attendees: selectedMeeting.attendees
-            });
+            // Access Control Check
+            const isAttendee = currentUser && selectedMeeting.attendees && selectedMeeting.attendees.some(u => String(u.id) === String(currentUser.id));
+
+            if (isAdmin || isAttendee) {
+                onJoinMeeting({
+                    id: selectedMeeting.id,
+                    title: selectedMeeting.title,
+                    code: selectedMeeting.code,
+                    documents: selectedMeeting.documents,
+                    attendees: selectedMeeting.attendees
+                });
+            } else {
+                alert("Bạn không có quyền truy cập vào cuộc họp này. Vui lòng liên hệ quản trị viên.");
+            }
         } else {
             setViewState('room');
         }
@@ -508,17 +523,25 @@ const OngoingMeetingBubble: React.FC<OngoingMeetingBubbleProps> = ({ onJoinMeeti
                                     <button 
                                         onClick={(e) => { 
                                             e.stopPropagation(); 
-                                            if (onJoinMeeting) {
-                                                onJoinMeeting({
-                                                    id: meeting.id,
-                                                    title: meeting.title,
-                                                    code: meeting.code,
-                                                    documents: meeting.documents,
-                                                    attendees: meeting.attendees
-                                                });
+                                            
+                                            // Access Control Check
+                                            const isAttendee = currentUser && meeting.attendees && meeting.attendees.some(u => String(u.id) === String(currentUser.id));
+
+                                            if (isAdmin || isAttendee) {
+                                                if (onJoinMeeting) {
+                                                    onJoinMeeting({
+                                                        id: meeting.id,
+                                                        title: meeting.title,
+                                                        code: meeting.code,
+                                                        documents: meeting.documents,
+                                                        attendees: meeting.attendees
+                                                    });
+                                                } else {
+                                                    setSelectedMeeting(meeting);
+                                                    setViewState('room');
+                                                }
                                             } else {
-                                                setSelectedMeeting(meeting);
-                                                setViewState('room');
+                                                alert("Bạn không có quyền truy cập vào cuộc họp này. Vui lòng liên hệ quản trị viên.");
                                             }
                                         }}
                                         className={`mt-4 w-full py-2 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${

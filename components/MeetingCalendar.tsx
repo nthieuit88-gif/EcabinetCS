@@ -41,15 +41,20 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
-  // Role State (Default to Admin for easier testing/usage)
-  const [currentUserRole, setCurrentUserRole] = useState<'Admin' | 'Member'>('Admin');
+  // Role State (Default to Member for security)
+  const [currentUserRole, setCurrentUserRole] = useState<'Admin' | 'Member'>('Member');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
       const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
       if (storedUser) {
           const user = JSON.parse(storedUser);
-          if (user.role === 'Admin' || user.role === 'Member') {
-              setCurrentUserRole(user.role);
+          setCurrentUser(user);
+          // Map user roles to component roles
+          if (user.role === 'Admin') {
+              setCurrentUserRole('Admin');
+          } else {
+              setCurrentUserRole('Member');
           }
       }
   }, []);
@@ -722,10 +727,19 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                              <div className="pt-2">
                                  <button 
                                     onClick={() => {
-                                        if (onJoinMeeting && selectedEvent) {
+                                        if (!onJoinMeeting || !selectedEvent) {
+                                            alert("Chức năng đang phát triển");
+                                            return;
+                                        }
+
+                                        // Access Control Check
+                                        const isAdmin = currentUserRole === 'Admin';
+                                        const isAttendee = currentUser && selectedEvent.attendees && selectedEvent.attendees.some(u => String(u.id) === String(currentUser.id));
+
+                                        if (isAdmin || isAttendee) {
                                             onJoinMeeting(selectedEvent);
                                         } else {
-                                            alert("Chức năng đang phát triển");
+                                            alert("Bạn không có quyền truy cập vào cuộc họp này. Vui lòng liên hệ quản trị viên.");
                                         }
                                     }}
                                     className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"

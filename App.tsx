@@ -73,6 +73,23 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Admin Route Component
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const userStr = localStorage.getItem('ECABINET_AUTH_USER');
+  if (!userStr) return <Navigate to="/login" replace />;
+  
+  try {
+      const user = JSON.parse(userStr);
+      if (user.role !== 'Admin') {
+          return <Navigate to="/" replace />;
+      }
+  } catch (e) {
+      return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
 function App() {
   // Initialize state with the current unit ID to avoid unnecessary updates on mount
   const [currentUnitId, setCurrentUnitId] = useState<string>(() => getCurrentUnitId());
@@ -269,7 +286,9 @@ function App() {
             
             <Route path="/admin" element={
               <ProtectedRoute>
-                <AdminLayout />
+                <AdminRoute>
+                  <AdminLayout />
+                </AdminRoute>
               </ProtectedRoute>
             }>
               <Route index element={<Dashboard />} />

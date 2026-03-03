@@ -470,7 +470,20 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
     const [selectedRepoDocIds, setSelectedRepoDocIds] = useState<number[]>([]);
 
     // Role Based Access Control State
-    const [currentUserRole, setCurrentUserRole] = useState<UserRole>('Admin');
+    const [currentUserRole, setCurrentUserRole] = useState<UserRole>('Member');
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+        if (storedUser) {
+            const user = JSON.parse(storedUser);
+            // Map user roles to component roles
+            if (user.role === 'Admin') {
+                setCurrentUserRole('Admin');
+            } else {
+                setCurrentUserRole('Member');
+            }
+        }
+    }, []);
 
     // Participants State (Moved here to fix ReferenceError)
     const [participants, setParticipants] = useState<ParticipantItem[]>(() => {
@@ -1081,7 +1094,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                                 <Users size={16} /> Thành viên ({participants.length + 1})
                             </div>
                             {/* System Locked: Add Participant Disabled */}
-                            {false && currentUserRole === 'Admin' && (
+                            {currentUserRole === 'Admin' && (
                                 <button 
                                     onClick={() => setShowAddParticipantModal(true)}
                                     className="p-1 rounded hover:bg-white/10 text-teal-500 hover:text-teal-400 transition-colors"
@@ -1134,7 +1147,7 @@ const MeetingRoom: React.FC<MeetingRoomProps> = ({ onLeave, meetingTitle, meetin
                                         <MoreVertical size={16} />
                                     </button>
                                     {/* System Locked: Remove Participant Disabled */}
-                                    {false && currentUserRole === 'Admin' && (
+                                    {currentUserRole === 'Admin' && (
                                         <button 
                                             onClick={() => handleRemoveParticipant(p.id, p.name)}
                                             className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all absolute right-2"

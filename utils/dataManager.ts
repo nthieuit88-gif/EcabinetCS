@@ -72,7 +72,7 @@ const AVATAR_COLORS = [
     "bg-gradient-to-br from-blue-400 to-cyan-500"
 ];
 
-const DEPARTMENTS = ["Hội đồng quản trị", "Ban Giám đốc", "Phòng Kế toán", "Phòng Nhân sự", "Phòng IT", "Phòng Kinh doanh"];
+const DEPARTMENTS = ["Văn phòng"];
 
 // Helper to generate mock users
 const generateUsers = (unitId: string): User[] => {
@@ -83,7 +83,7 @@ const generateUsers = (unitId: string): User[] => {
         id: Date.now(),
         name: `Quản trị viên ${unitId.split('_')[1]}`,
         role: "Admin",
-        dept: "Ban Quản trị",
+        dept: "Văn phòng",
         status: "active",
         avatarColor: "bg-gradient-to-br from-purple-600 to-indigo-700",
         email: `admin@${unitId}.com`,
@@ -92,11 +92,15 @@ const generateUsers = (unitId: string): User[] => {
 
     // 2. Create 25 Users
     for (let i = 1; i <= 25; i++) {
+        // Distribute roles: Admin (already added), Lãnh đạo (approx 20%), Công chức (rest)
+        const isLeader = i <= 5;
+        const role = isLeader ? "Lãnh đạo" : "Công chức";
+        
         users.push({
             id: Date.now() + i,
             name: `Nhân viên ${i} - ${unitId.split('_')[1]}`,
-            role: i <= 2 ? "Giám đốc" : (i <= 5 ? "Thư ký" : "Thành viên"),
-            dept: DEPARTMENTS[i % DEPARTMENTS.length],
+            role: role,
+            dept: "Văn phòng",
             status: Math.random() > 0.3 ? "active" : "offline",
             avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length],
             email: `user${i}@${unitId}.com`,

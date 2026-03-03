@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getCurrentUnitData, saveCurrentUnitUsers, User, syncUsersFromSupabase, getCurrentUnitId } from '../../utils/dataManager';
-import { Plus, Pencil, Trash2, X, Check, Search, Mail, User as UserIcon, Briefcase, Shield, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Check, Search, Mail, User as UserIcon, Shield, Loader2 } from 'lucide-react';
 import { supabase } from '../../utils/supabaseClient';
 
 const UserManager: React.FC = () => {
@@ -13,7 +13,7 @@ const UserManager: React.FC = () => {
         name: '',
         email: '',
         role: 'Thành viên',
-        dept: 'Phòng Kinh doanh',
+        dept: 'Công chức',
         status: 'active',
         avatarColor: 'bg-blue-500'
     });
@@ -55,8 +55,8 @@ const UserManager: React.FC = () => {
             setFormData({
                 name: '',
                 email: '',
-                role: 'Thành viên',
-                dept: 'Phòng Kinh doanh',
+                role: 'Công chức',
+                dept: 'Văn phòng',
                 status: 'active',
                 avatarColor: getRandomColor()
             });
@@ -161,11 +161,10 @@ const UserManager: React.FC = () => {
     const filteredUsers = users.filter(user => 
         user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.dept.toLowerCase().includes(searchTerm.toLowerCase())
+        user.role.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const DEPARTMENTS = ["Hội đồng quản trị", "Ban Giám đốc", "Phòng Kế toán", "Phòng Nhân sự", "Phòng IT", "Phòng Kinh doanh"];
-    const ROLES = ["Admin", "Giám đốc", "Thư ký", "Thành viên"];
+    const ROLES = ["Admin", "Lãnh đạo", "Công chức"];
 
     return (
         <div className="space-y-6">
@@ -197,7 +196,7 @@ const UserManager: React.FC = () => {
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-bold text-slate-500 uppercase tracking-wider">
                                 <th className="px-6 py-4">Nhân sự</th>
-                                <th className="px-6 py-4">Vai trò & Phòng ban</th>
+                                <th className="px-6 py-4">Chức vụ</th>
                                 <th className="px-6 py-4">Trạng thái</th>
                                 <th className="px-6 py-4 text-right">Hành động</th>
                             </tr>
@@ -226,13 +225,8 @@ const UserManager: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-700">
-                                                <Shield size={14} className="text-blue-500" /> {user.role}
-                                            </div>
-                                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                                                <Briefcase size={12} /> {user.dept}
-                                            </div>
+                                        <div className="flex items-center gap-1.5 text-sm font-bold text-slate-700">
+                                            <Shield size={14} className="text-blue-500" /> {user.role}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -311,21 +305,9 @@ const UserManager: React.FC = () => {
                                     />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Phòng ban</label>
-                                    <select 
-                                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white"
-                                        value={formData.dept}
-                                        onChange={e => setFormData({...formData, dept: e.target.value})}
-                                    >
-                                        {DEPARTMENTS.map(dept => (
-                                            <option key={dept} value={dept}>{dept}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Vai trò</label>
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Chức vụ</label>
                                     <select 
                                         className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white"
                                         value={formData.role}

@@ -207,8 +207,6 @@ const Login = () => {
                             <span className={`px-2 py-0.5 rounded-full ${user.role === 'Admin' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>
                               {user.role}
                             </span>
-                            <span>•</span>
-                            <span>{user.dept}</span>
                           </div>
                         </div>
                         <ArrowRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
@@ -244,7 +242,7 @@ const Login = () => {
                     {selectedUser.name.charAt(0)}
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800">{selectedUser.name}</h2>
-                  <p className="text-slate-500">{selectedUser.role} - {selectedUser.dept}</p>
+                  <p className="text-slate-500">{selectedUser.role}</p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">
