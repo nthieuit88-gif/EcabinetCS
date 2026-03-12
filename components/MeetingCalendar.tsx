@@ -39,6 +39,7 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [availableDocs, setAvailableDocs] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const isLoadingRef = useRef(false);
   const [isUploading, setIsUploading] = useState(false);
   
   // Role State (Default to Member for security)
@@ -115,11 +116,14 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
       
       // Listen for unit changes or other updates if needed
       const handleDataChange = async () => {
+          if (isLoadingRef.current) return;
+          isLoadingRef.current = true;
           setIsLoading(true);
           const currentUnitId = getCurrentUnitId();
           await syncBookingsFromSupabase(currentUnitId);
           await syncDocumentsFromSupabase(currentUnitId);
           loadData();
+          isLoadingRef.current = false;
           setIsLoading(false);
       };
       window.addEventListener('unit-change', handleDataChange);
@@ -406,14 +410,16 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
 
           saveCurrentUnitBookings(currentBookings);
           
-          // Re-sync
-          await syncBookingsFromSupabase(unitId);
-          loadData(); // Refresh UI
+          // Update UI state directly
+          loadData();
 
           setShowForm(false);
           setFormData(null);
           setShowUserDropdown(false);
           setUserSearchTerm('');
+
+          // Re-sync in background
+          syncBookingsFromSupabase(unitId, false);
       } catch (err) {
           console.error('Failed to save event:', err);
           alert("Đã xảy ra lỗi không mong muốn khi lưu cuộc họp.");
@@ -747,7 +753,8 @@ const MeetingCalendar: React.FC<MeetingCalendarProps> = ({ onJoinMeeting }) => {
                                         if (isAdmin || isAttendee) {
                                             onJoinMeeting(selectedEvent);
                                         } else {
-                                            alert("Bạn không có quyền truy cập vào cuộc họp này. Vui lòng liên hệ quản trị viên.");
+                                            const attendeeNames = selectedEvent.attendees?.map(u => u.name).join(', ') || 'Không có';
+                                            alert(`Bạn không có quyền truy cập vào cuộc họp này.\n\nLý do: Tài khoản của bạn (${currentUser?.name}) không có trong danh sách thành viên tham dự và bạn đang ở vai trò "${currentUserRole}".\n\nDanh sách thành viên được mời: ${attendeeNames}`);
                                         }
                                     }}
                                     className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"

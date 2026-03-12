@@ -516,7 +516,7 @@ export const syncDocumentsFromSupabase = async (unitId: string): Promise<Documen
     return getUnitData(unitId).documents || [];
 };
 
-export const syncBookingsFromSupabase = async (unitId: string): Promise<Booking[]> => {
+export const syncBookingsFromSupabase = async (unitId: string, shouldDispatchEvent: boolean = true): Promise<Booking[]> => {
     // Sync rooms first to avoid foreign key issues
     const unitData = getUnitData(unitId);
     if (unitData.rooms && unitData.rooms.length > 0) {
@@ -567,7 +567,9 @@ export const syncBookingsFromSupabase = async (unitId: string): Promise<Booking[
                 const currentData = JSON.parse(currentDataStr);
                 currentData.bookings = mappedBookings;
                 localStorage.setItem(key, JSON.stringify(currentData));
-                window.dispatchEvent(new Event('data-change'));
+                if (shouldDispatchEvent) {
+                    window.dispatchEvent(new Event('data-change'));
+                }
             }
             return mappedBookings;
         }
