@@ -8,6 +8,8 @@ interface OngoingMeetingsWidgetProps {
 
 const OngoingMeetingsWidget: React.FC<OngoingMeetingsWidgetProps> = ({ onJoinMeeting }) => {
     const [meetings, setMeetings] = useState<any[]>([]);
+    const [currentUser, setCurrentUser] = useState<any>(null);
+    const [currentUserRole, setCurrentUserRole] = useState<'Admin' | 'Member'>('Member');
 
     const loadMeetings = () => {
         const data = getCurrentUnitData();
@@ -33,11 +35,35 @@ const OngoingMeetingsWidget: React.FC<OngoingMeetingsWidgetProps> = ({ onJoinMee
     };
 
     useEffect(() => {
+        const storedUser = localStorage.getItem('ECABINET_AUTH_USER');
+        if (storedUser) {
+            const user = JSON.parse(storedUser);
+            setCurrentUser(user);
+            setCurrentUserRole(user.role === 'Admin' ? 'Admin' : 'Member');
+        }
+
         loadMeetings();
         const handleDataChange = () => loadMeetings();
         window.addEventListener('data-change', handleDataChange);
         return () => window.removeEventListener('data-change', handleDataChange);
     }, []);
+
+    const handleJoinClick = (meeting: any) => {
+        const isAdmin = currentUserRole === 'Admin';
+        const isAttendee = currentUser && meeting.attendees && meeting.attendees.some((u: any) => String(u.id) === String(currentUser.id));
+
+        if (isAdmin || isAttendee) {
+            onJoinMeeting?.({
+                id: meeting.id,
+                title: meeting.title,
+                code: `MEET-${meeting.id}`,
+                documents: meeting.documents,
+                attendees: meeting.attendees
+            });
+        } else {
+            alert("Bạn không có quyền truy cập vào cuộc họp này. Vui lòng liên hệ quản trị viên.");
+        }
+    };
 
     if (meetings.length === 0) return null;
 
@@ -55,13 +81,7 @@ const OngoingMeetingsWidget: React.FC<OngoingMeetingsWidgetProps> = ({ onJoinMee
                         <div className="flex items-center justify-between">
                             <span className="flex items-center gap-1.5 text-sm font-bold text-slate-500"><Users size={16} /> {meeting.attendeesCount} người tham dự</span>
                             <button 
-                                onClick={() => onJoinMeeting?.({
-                                    id: meeting.id,
-                                    title: meeting.title,
-                                    code: `MEET-${meeting.id}`,
-                                    documents: meeting.documents,
-                                    attendees: meeting.attendees
-                                })}
+                                onClick={() => handleJoinClick(meeting)}
                                 className="px-4 py-2 bg-teal-600 text-white text-sm font-bold rounded-xl hover:bg-teal-700 transition-colors flex items-center gap-2"
                             >
                                 <Video size={16} /> Tham gia ngay
