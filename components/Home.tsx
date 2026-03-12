@@ -3,7 +3,7 @@ import Navbar from './Navbar';
 import Hero from './Hero';
 import SocialProof from './SocialProof';
 import Footer from './Footer';
-import OngoingMeetingBubble from './OngoingMeetingBubble';
+import OngoingMeetingsWidget from './OngoingMeetingsWidget';
 import MeetingCalendar from './MeetingCalendar';
 import DocumentRepository from './DocumentRepository';
 import UserManagement from './UserManagement';
@@ -194,6 +194,7 @@ const Home: React.FC = () => {
       <main className="flex-col flex overflow-hidden">
         <Hero />
         <SocialProof />
+        <OngoingMeetingsWidget onJoinMeeting={(meeting) => setActiveMeeting(meeting)} />
         <MeetingCalendar onJoinMeeting={(event) => setActiveMeeting({
             id: event.id,
             title: event.title, 
@@ -212,7 +213,6 @@ const Home: React.FC = () => {
         )}
       </main>
       <Footer />
-      <OngoingMeetingBubble onJoinMeeting={(meeting) => setActiveMeeting(meeting)} />
     </>
   );
 };
